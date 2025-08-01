@@ -1,0 +1,8 @@
+blank_issues_enabled: false    # Запретить создание Issues без шаблона
+contact_links:
+  - name: ❓ question
+    url: https://example.com/docs
+    about: any questions about EAGLE
+  - name: 🐞 bug_report
+    url: https://example.com/bug-report
+    about: repoert any bugs here
