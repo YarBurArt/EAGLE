@@ -32,7 +32,9 @@ async def fixture_setup_new_test_database() -> None:
     # create new test db using connection to current database
     conn = await database_session._ASYNC_ENGINE.connect()
     await conn.execution_options(isolation_level="AUTOCOMMIT")
-    await conn.execute(sqlalchemy.text(f"DROP DATABASE IF EXISTS {test_db_name}"))
+    await conn.execute(
+        sqlalchemy.text(f"DROP DATABASE IF EXISTS {test_db_name}")
+        )
     await conn.execute(sqlalchemy.text(f"CREATE DATABASE {test_db_name}"))
     await conn.close()
 
@@ -103,8 +105,8 @@ async def fixture_session_with_rollback(
 
 @pytest_asyncio.fixture(name="client", scope="function")
 async def fixture_client(session: AsyncSession) -> AsyncGenerator[AsyncClient]:
-    transport = ASGITransport(app=fastapi_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as aclient:
+    asgit = ASGITransport(app=fastapi_app)
+    async with AsyncClient(transport=asgit, base_url="http://test") as aclient:
         aclient.headers.update({"Host": "localhost"})
         yield aclient
 

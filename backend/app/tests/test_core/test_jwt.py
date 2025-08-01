@@ -27,7 +27,8 @@ def test_jwt_payload_is_correct() -> None:
     assert token.payload.iss == get_settings().security.jwt_issuer
     assert (
         token.payload.exp
-        == int(time.time()) + get_settings().security.jwt_access_token_expire_secs
+        == int(time.time()) +
+        get_settings().security.jwt_access_token_expire_secs
     )
 
 
@@ -50,7 +51,8 @@ def test_jwt_error_before_iat_time() -> None:
         with pytest.raises(HTTPException) as e:
             jwt.verify_jwt_token(token=token.access_token)
 
-        assert e.value.detail == "Token invalid: The token is not yet valid (iat)"
+        assert e.value.detail == "Token invalid: "
+        "The token is not yet valid (iat)"
 
 
 def test_jwt_error_with_invalid_token() -> None:
@@ -75,8 +77,8 @@ def test_jwt_error_with_invalid_issuer() -> None:
 def test_jwt_error_with_invalid_secret_key() -> None:
     user_id = "test_user_id"
     token = jwt.create_jwt_token(user_id)
-
-    get_settings().security.jwt_secret_key = SecretStr("the secret has changed now!")
+    ch_now = SecretStr("the secret has changed now!")
+    get_settings().security.jwt_secret_key = ch_now
 
     with pytest.raises(HTTPException) as e:
         jwt.verify_jwt_token(token=token.access_token)

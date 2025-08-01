@@ -69,7 +69,8 @@ async def test_login_access_token_jwt_has_valid_expire_time(
     current_timestamp = int(time.time())
     assert (
         token["expires_at"]
-        == current_timestamp + get_settings().security.jwt_access_token_expire_secs
+        == current_timestamp +
+        get_settings().security.jwt_access_token_expire_secs
     )
 
 
