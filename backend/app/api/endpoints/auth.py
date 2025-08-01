@@ -92,7 +92,9 @@ async def login_access_token(
     refresh_token = RefreshToken(
         user_id=user.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
+        exp=int(
+            time.time() +
+            get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token)
     await session.commit()
@@ -145,7 +147,9 @@ async def refresh_token(
     refresh_token = RefreshToken(
         user_id=token.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
+        exp=int(
+            time.time() +
+            get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token)
     await session.commit()

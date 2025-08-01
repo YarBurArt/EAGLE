@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, DateTime, ForeignKey, 
+    BigInteger, Boolean, DateTime, ForeignKey,
     String, Uuid, func, Text, Integer
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -48,9 +48,11 @@ class User(Base):
         String(256), nullable=False, unique=True, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
-    attack_chain: Mapped[list["AttackChain"]] = relationship(back_populates="user")
-    
+    refresh_tokens: Mapped[list["RefreshToken"]
+                           ] = relationship(back_populates="user")
+    attack_chain: Mapped[list["AttackChain"]
+                         ] = relationship(back_populates="user")
+
 
 class RefreshToken(Base):
     __tablename__ = "refresh_token"
@@ -70,7 +72,8 @@ class RefreshToken(Base):
 class AttackChain(Base):
     __tablename__ = "attack_chain"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(
         ForeignKey("user_account.user_id", ondelete="CASCADE"),
     )
@@ -81,13 +84,15 @@ class AttackChain(Base):
         String(64), nullable=False, unique=False
     )
     user: Mapped["User"] = relationship(back_populates="attack_chain")
-    attack_step: Mapped[list["AttackStep"]] = relationship(back_populates="attack_chain")
-    
+    attack_step: Mapped[list["AttackStep"]] = relationship(
+        back_populates="attack_chain")
+
 
 class AttackStep(Base):
     __tablename__ = "attack_step"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True)
     chain_id: Mapped[str] = mapped_column(
         ForeignKey("attack_chain.id", ondelete="CASCADE"),
     )
@@ -105,7 +110,7 @@ class AttackStep(Base):
     )
     # only for downloading payload link
     mythic_payload_uuid: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False) , nullable=False, unique=False
+        Uuid(as_uuid=False), nullable=False, unique=False
     )
     mythic_payload_id: Mapped[int] = mapped_column(
         Integer, nullable=False, unique=False
@@ -120,15 +125,17 @@ class AttackStep(Base):
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-        
-    attack_chain: Mapped["AttackChain"] = relationship(back_populates="attack_step")
+
+    attack_chain: Mapped["AttackChain"] = relationship(
+        back_populates="attack_step")
     agent: Mapped[list["Agent"]] = relationship(back_populates="attack_step")
 
 
 class Agent(Base):
     __tablename__ = "agent"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True)
     step_id: Mapped[str] = mapped_column(
         ForeignKey("attack_step.id", ondelete="CASCADE"),
     )
@@ -146,4 +153,3 @@ class Agent(Base):
         Integer, nullable=False, unique=False
     )
     attack_step: Mapped["AttackStep"] = relationship(back_populates="agent")
-

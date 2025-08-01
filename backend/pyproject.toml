@@ -20,6 +20,7 @@ sqlalchemy = { extras = ["asyncio"], version = "^2.0.41" }
 mythic = "^0.2.6"
 gql = "^3.5.3"
 dotenv = "^0.9.9"
+autopep8 = "^2.3.2"
 
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.9.1"

@@ -137,7 +137,9 @@ async def test_login_access_token_refresh_token_exists_in_db(
     token = response.json()
 
     token_db_count = await session.scalar(
-        select(func.count()).where(RefreshToken.refresh_token == token["refresh_token"])
+        select(
+            func.count()).where(
+            RefreshToken.refresh_token == token["refresh_token"])
     )
     assert token_db_count == 1
 
@@ -159,7 +161,8 @@ async def test_login_access_token_refresh_token_in_db_has_valid_fields(
 
     token = response.json()
     result = await session.scalars(
-        select(RefreshToken).where(RefreshToken.refresh_token == token["refresh_token"])
+        select(RefreshToken).where(
+            RefreshToken.refresh_token == token["refresh_token"])
     )
     refresh_token = result.one()
 

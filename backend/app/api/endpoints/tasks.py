@@ -15,6 +15,7 @@ from app.cmd.proc import check_and_process_local_cmd
 
 router = APIRouter()
 
+
 @router.post(
     "/new-chain",
     description="Create new chain",
@@ -25,9 +26,9 @@ async def create_new_chain(
     current_user: User = Depends(deps.get_current_user),
 ) -> str:
     chain = AttackChain(
-        user_id = current_user.user_id,
-        chain_name = data.chain_name,
-        final_status = "execution"
+        user_id=current_user.user_id,
+        chain_name=data.chain_name,
+        final_status="execution"
     )
     session.add(chain)
     try:
@@ -40,6 +41,7 @@ async def create_new_chain(
         )
 
     return data.chain_name
+
 
 @router.post(
     "/run-command",
@@ -58,7 +60,7 @@ async def run_local_command(
             AttackChain.chain_name == data.chain_name
         )
     )
-    chain_c = chain_ca.scalars().first()  # get first object of select 
+    chain_c = chain_ca.scalars().first()  # get first object of select
     # zero agent must be already deployed, thats why we need display id
     step: AttackStep = await check_and_process_local_cmd(
         data.command, data.callback_display_id, chain_c.id)
@@ -69,14 +71,13 @@ async def run_local_command(
     except IntegrityError:
         await session.rollback()
 
-    return LocalCommandResponse( 
-        user_id = current_user.user_id,
-        chain_name = chain_c.chain_name,
-        callback_display_id = data.callback_display_id,
-        mythic_task_id = step.mythic_task_id,
-        tool_name = step.tool_name,
-        command = step.command,
-        status = step.status,
-        raw_output = step.raw_log
-    ) 
-    
+    return LocalCommandResponse(
+        user_id=current_user.user_id,
+        chain_name=chain_c.chain_name,
+        callback_display_id=data.callback_display_id,
+        mythic_task_id=step.mythic_task_id,
+        tool_name=step.tool_name,
+        command=step.command,
+        status=step.status,
+        raw_output=step.raw_log
+    )
