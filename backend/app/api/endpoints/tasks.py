@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.core.security.password import get_password_hash
-from app.models import User, AttackChain, AttackStep, Agent
+from app.models import User, AttackChain, AttackStep
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest
 )

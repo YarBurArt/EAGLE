@@ -36,7 +36,8 @@ class User(Base):
     __tablename__ = "user_account"
 
     user_id: Mapped[str] = mapped_column(
-        Uuid(as_uuid=False), primary_key=True, default=lambda _: str(uuid.uuid4())
+        Uuid(as_uuid=False), primary_key=True,
+        default=lambda _: str(uuid.uuid4())
     )
     username: Mapped[str] = mapped_column(
         String(256), nullable=True, unique=True, index=True

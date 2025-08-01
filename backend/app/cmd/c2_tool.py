@@ -1,4 +1,4 @@
-from app.core.config import get_settings
+# from app.core.config import get_settings
 from mythic import mythic
 
 import os
