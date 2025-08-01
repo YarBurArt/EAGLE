@@ -1,4 +1,4 @@
-from app.core.config import get_settings
+# from app.core.config import get_settings
 from mythic import mythic
 
 import os
@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 
 mythic_instance = None
 load_dotenv()
+
 
 async def init_mythic():
     global mythic_instance
@@ -28,14 +29,17 @@ async def init_mythic():
     )
     return mythic_instance
 
+
 def check_status(callback_display_id: int):
     pass
 
+
 async def get_payload_ids(callback_display_id):
-    payload_a = await mythic.get_all_payloads(mythic=mythic_instance) 
-    payload = payload_a[0] # temp
-    return (payload.get('filemetum', {}).get('id'), 
-            payload.get('filemetum', {}).get('agent_file_id')) 
+    payload_a = await mythic.get_all_payloads(mythic=mythic_instance)
+    payload = payload_a[0]  # temp
+    return (payload.get('filemetum', {}).get('id'),
+            payload.get('filemetum', {}).get('agent_file_id'))
+
 
 async def execute_local_command(cmd, callback_display_id: int, timeout=500):
     global mythic_instance
@@ -49,7 +53,7 @@ async def execute_local_command(cmd, callback_display_id: int, timeout=500):
         callback_display_id=callback_display_id,
         timeout=timeout,
     )
-    # temp value 
+    # temp value
     mythic_t_id = callback_display_id
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
 

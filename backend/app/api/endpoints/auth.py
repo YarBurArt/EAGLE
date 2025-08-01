@@ -26,7 +26,10 @@ ACCESS_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "description": "Invalid email or password",
         "content": {
-            "application/json": {"example": {"detail": api_messages.PASSWORD_INVALID}}
+            "application/json": {"example": {
+                "detail": api_messages.PASSWORD_INVALID
+            }
+            }
         },
     },
 }
@@ -39,11 +42,15 @@ REFRESH_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
                 "examples": {
                     "refresh token expired": {
                         "summary": api_messages.REFRESH_TOKEN_EXPIRED,
-                        "value": {"detail": api_messages.REFRESH_TOKEN_EXPIRED},
+                        "value": {
+                            "detail": api_messages.REFRESH_TOKEN_EXPIRED
+                            },
                     },
                     "refresh token already used": {
                         "summary": api_messages.REFRESH_TOKEN_ALREADY_USED,
-                        "value": {"detail": api_messages.REFRESH_TOKEN_ALREADY_USED},
+                        "value": {
+                            "detail": api_messages.REFRESH_TOKEN_ALREADY_USED
+                            },
                     },
                 }
             }
@@ -64,13 +71,15 @@ REFRESH_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     "/access-token",
     response_model=AccessTokenResponse,
     responses=ACCESS_TOKEN_RESPONSES,
-    description="OAuth2 compatible token, get an access token for future requests using username and password",
+    description="OAuth2 compatible token, get an access token "
+                "for future requests using username and password",
 )
 async def login_access_token(
     session: AsyncSession = Depends(deps.get_session),
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> AccessTokenResponse:
-    user = await session.scalar(select(User).where(User.email == form_data.username))
+    query = select(User).where(User.email == form_data.username)
+    user = await session.scalar(query)
 
     if user is None:
         # this is naive method to not return early
@@ -92,7 +101,9 @@ async def login_access_token(
     refresh_token = RefreshToken(
         user_id=user.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
+        exp=int(
+            time.time() +
+            get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token)
     await session.commit()
@@ -109,7 +120,8 @@ async def login_access_token(
     "/refresh-token",
     response_model=AccessTokenResponse,
     responses=REFRESH_TOKEN_RESPONSES,
-    description="OAuth2 compatible token, get an access token for future requests using refresh token",
+    description="OAuth2 compatible token, get an access token"
+                "for future requests using refresh token",
 )
 async def refresh_token(
     data: RefreshTokenRequest,
@@ -145,7 +157,9 @@ async def refresh_token(
     refresh_token = RefreshToken(
         user_id=token.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
+        exp=int(
+            time.time() +
+            get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token)
     await session.commit()
@@ -168,7 +182,8 @@ async def register_new_user(
     new_user: UserCreateRequest,
     session: AsyncSession = Depends(deps.get_session),
 ) -> User:
-    user = await session.scalar(select(User).where(User.email == new_user.email))
+    query = select(User).where(User.email == new_user.email)
+    user = await session.scalar(query)
     if user is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

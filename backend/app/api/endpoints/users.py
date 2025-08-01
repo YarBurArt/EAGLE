@@ -27,7 +27,8 @@ async def delete_current_user(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
 ) -> None:
-    await session.execute(delete(User).where(User.user_id == current_user.user_id))
+    query = delete(User).where(User.user_id == current_user.user_id)
+    await session.execute(query)
     await session.commit()
 
 
@@ -41,6 +42,7 @@ async def reset_current_user_password(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> None:
-    current_user.hashed_password = get_password_hash(user_update_password.password)
+    current_user.hashed_password = get_password_hash(
+        user_update_password.password)
     session.add(current_user)
     await session.commit()

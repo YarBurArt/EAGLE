@@ -77,7 +77,8 @@ async def test_refresh_token_fails_with_message_when_token_is_used(
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json() == {"detail": api_messages.REFRESH_TOKEN_ALREADY_USED}
+    assert response.json() == {
+        "detail": api_messages.REFRESH_TOKEN_ALREADY_USED}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -187,7 +188,8 @@ async def test_refresh_token_success_jwt_has_valid_expire_time(
     current_timestamp = int(time.time())
     assert (
         token["expires_at"]
-        == current_timestamp + get_settings().security.jwt_access_token_expire_secs
+        == current_timestamp +
+        get_settings().security.jwt_access_token_expire_secs
     )
 
 
@@ -278,6 +280,8 @@ async def test_refresh_token_success_new_refresh_token_is_in_db(
 
     token = response.json()
     token_db_count = await session.scalar(
-        select(func.count()).where(RefreshToken.refresh_token == token["refresh_token"])
+        select(
+            func.count()).where(
+            RefreshToken.refresh_token == token["refresh_token"])
     )
     assert token_db_count == 1

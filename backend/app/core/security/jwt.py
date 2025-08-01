@@ -44,9 +44,11 @@ def create_jwt_token(user_id: str) -> JWTToken:
 
 
 def verify_jwt_token(token: str) -> JWTTokenPayload:
-    # Pay attention to verify_signature passed explicite, even if it is the default.
+    # Pay attention to verify_signature passed explicite,
+    # even if it is the default.
     # Verification is based on expected payload fields like "exp", "iat" etc.
-    # so if you rename for example "exp" to "my_custom_exp", this is gonna break,
+    # so if you rename for example "exp" to "my_custom_exp",
+    # this is gonna break)
     # jwt.ExpiredSignatureError will not be raised, that can potentialy
     # be major security risk - not validating tokens at all.
     # If unsure, jump into jwt.decode code, make sure tests are passing
