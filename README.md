@@ -65,7 +65,7 @@ Setup database and migrations
 # Setup database
 docker-compose up -d
 
-# Run Alembic migrations
+# Run Alembic migrations for DB changes
 alembic upgrade head
 ```
 Run backend FastAPI
