@@ -1,8 +1,7 @@
 # EAGLE - Emulated Attack Generator w/ Layered Engine
 
 The Emulated Attack Generator with Layered Engine is an interactive system for building
-and executing realistic attack chains based on the [Unified Cyber Kill Chain](https://www.unifiedkillchain.com/) stages. 
-Chain and supports the dynamic formation of attack chains in real
+and executing realistic attack chains based on the [Unified Cyber Kill Chain](https://www.unifiedkillchain.com/) stages and supports the dynamic formation of attack chains in real
 time. It works in the context of an API that uses GraphQL and the Mythics library plus a minimal frontend.
 
 The platform operates through a C2 infrastructure (Mythic C2 + agents, zero agent) and
@@ -15,7 +14,7 @@ The project is developed using `FastAPI` + `PostgreSQL` (`SQLAlchemy 2.0` + `ale
 
 ## Requirements
 
-So far, this has been tested on `Kali Linux` and `Parrot OS`. Debian may need to build new python [from source](https://docs.python.org/3/using/unix.html#building-python
+So far, this has been tested on latest `Kali Linux` and `Parrot OS`. Debian may need to build new python [from source](https://docs.python.org/3/using/unix.html#building-python
 ).
 
 The main requirement is `python3.13` and above.
@@ -56,7 +55,7 @@ MYTHIC__TIMEOUT=-1
 ```
 Install dependencies
 ```bash
-### Poetry install (python3.13)
+# Poetry install (python3.13)
 poetry install
 # or on debian / parrot
 python3.13 -m poetry install
