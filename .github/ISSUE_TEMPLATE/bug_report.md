@@ -1,21 +1,38 @@
-### Describe the Bug  
-A clear, concise summary of the issue.  
+---
+name: Bug report
+about: Create a report to help us improve
+title: ''
+labels: ''
+assignees: ''
 
-### Steps to Reproduce  
-1. Go to '...'  
-2. Click on '....'  
-3. Scroll to '....'  
-4. See error  
+---
 
-### Expected Behavior  
-What you expected to happen.  
+**Describe the bug**
+A clear and concise description of what the bug is.
 
-### Actual Behavior  
-What actually happened (error messages, logs, etc.).  
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Go to '...'
+2. Click on '....'
+3. Scroll down to '....'
+4. See error
 
-### Environment  
-- Version: [e.g., 1.0.0]  
-- OS/Browser: [e.g., Windows 10/Chrome 120]  
+**Expected behavior**
+A clear and concise description of what you expected to happen.
 
-### Additional Context  
-Screenshots, stack traces, or related issues.  
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
+
+**Desktop (please complete the following information):**
+ - OS: [e.g. iOS]
+ - Browser [e.g. chrome, safari]
+ - Version [e.g. 22]
+
+**Smartphone (please complete the following information):**
+ - Device: [e.g. iPhone6]
+ - OS: [e.g. iOS8.1]
+ - Browser [e.g. stock browser, safari]
+ - Version [e.g. 22]
+
+**Additional context**
+Add any other context about the problem here.
