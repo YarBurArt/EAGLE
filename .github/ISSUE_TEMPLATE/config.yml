@@ -1,8 +1,14 @@
 blank_issues_enabled: false    # Запретить создание Issues без шаблона
-contact_links:
-  - name: ❓ question
-    url: https://example.com/docs
-    about: any questions about EAGLE
+issue_shemas:
+  - name: ❓ feature
+    default_template : feature_request.md
+    about: any features are needed
   - name: 🐞 bug_report
-    url: https://example.com/bug-report
-    about: repoert any bugs here
+    default_template : bug_report.md
+    about: report about a bug
+  - name : refactor
+    about : Suggested refactoring approach
+    default_template : refactor.md
+  - name : test_coverage
+    about : - Unit tests, Integration tests, E2E tests
+    default_template : test_coverage.md
