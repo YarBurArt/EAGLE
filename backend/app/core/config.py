@@ -19,8 +19,7 @@
 import logging.config
 from functools import lru_cache
 from pathlib import Path
-
-from pydantic import AnyHttpUrl, BaseModel, Field, SecretStr, computed_field
+from pydantic import AnyHttpUrl, BaseModel, Field, SecretStr, computed_field, BaseSettings
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import URL
 
@@ -112,3 +111,13 @@ def logging_config(log_level: str) -> None:
 
 
 logging_config(log_level=get_settings().log_level)
+
+
+class Settings(BaseSettings):
+    LLM_API_URL: str = "http://localhost:69228"  # Для локального Ollama
+    LLM_API_KEY: str = None
+    LLM_TIMEOUT: int = 120
+    LLM_DEFAULT_MODEL: str = "mistral"
+
+    class Config:
+        env_file = ".env"
