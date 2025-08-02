@@ -35,9 +35,22 @@ async def init_mythic():
     return mythic_instance
 
 
-def check_status(callback_display_id: int):
-    """ check status of agent """
-    pass
+async def check_status(callback_display_id: int) -> str:
+    """ check status of agent, if there is display_id in active
+        -> agent callback not completely dead """
+    # we need just display_id from active callback
+    custom_attributes = """
+    display_id
+    """
+    result = await mythic.get_all_active_callbacks(
+        mythic=mythic_instance, custom_return_attributes=custom_attributes
+    )
+    has_id = any(i.get("display_id") == callback_display_id for i in result)
+    if has_id:
+        return "success"
+    # maybe add elif based on time 
+    else:
+        return "fail"
 
 
 async def get_payload_ids(callback_display_id):
