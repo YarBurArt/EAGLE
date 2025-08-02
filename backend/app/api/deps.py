@@ -1,3 +1,7 @@
+"""
+module for general dependencies
+like all authenticated endpoints need user session & id
+"""
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
@@ -15,6 +19,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/access-token")
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
+    """ get new database session by generator """
     async with database_session.get_async_session() as session:
         yield session
 
@@ -23,6 +28,7 @@ async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     session: AsyncSession = Depends(get_session),
 ) -> User:
+    """ get user from DB by jwt token """
     token_payload = verify_jwt_token(token)
 
     query = select(User).where(User.user_id == token_payload.sub)
