@@ -48,17 +48,33 @@ async def check_status(callback_display_id: int) -> str:
     has_id = any(i.get("display_id") == callback_display_id for i in result)
     if has_id:
         return "success"
-    # maybe add elif based on time 
+    # maybe add elif based on time
     else:
         return "fail"
 
 
 async def get_payload_ids(callback_display_id):
     """ get payload id and uuid from display id """
-    payload_a = await mythic.get_all_payloads(mythic=mythic_instance)
-    payload = payload_a[0]  # temp
-    return (payload.get('filemetum', {}).get('id'),
-            payload.get('filemetum', {}).get('agent_file_id'))
+    # custom query that will be wrapped in custom_return_attributes for GraphQL
+    custom_attributes = """
+    host
+    display_id
+    payload {
+        id
+        uuid
+    }
+    """
+    result = await mythic.get_all_active_callbacks(
+        mythic=mythic_instance, custom_return_attributes=custom_attributes
+    )
+    callback = next(
+        (i for i in result if i.get("id") == callback_display_id),
+        None)
+    payload = callback.get("payload")
+    if payload:
+        return payload.get("id"), payload.get("uuid")
+    else:
+        return 1, "00000000-0000-0000-0000-000000000000"
 
 
 async def execute_local_command(cmd, callback_display_id: int, timeout=500):
