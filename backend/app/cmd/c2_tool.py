@@ -1,3 +1,7 @@
+"""
+Module that handles all responsibilities related
+to working with Mythic C2
+"""
 # from app.core.config import get_settings
 from mythic import mythic
 
@@ -10,6 +14,7 @@ load_dotenv()
 
 
 async def init_mythic():
+    """ async get connect to mythic """
     global mythic_instance
     """
     # in .env like MYTHIC__SERVER_PORT=7443
@@ -31,10 +36,12 @@ async def init_mythic():
 
 
 def check_status(callback_display_id: int):
+    """ check status of agent """
     pass
 
 
 async def get_payload_ids(callback_display_id):
+    """ get payload id and uuid from display id """
     payload_a = await mythic.get_all_payloads(mythic=mythic_instance)
     payload = payload_a[0]  # temp
     return (payload.get('filemetum', {}).get('id'),
@@ -42,6 +49,9 @@ async def get_payload_ids(callback_display_id):
 
 
 async def execute_local_command(cmd, callback_display_id: int, timeout=500):
+    """ async function to execute command on zero agent via shell agent
+        and timeout, inside, there is a subscription to graphql event
+        at the end of the task"""
     global mythic_instance
     if mythic_instance is None:
         mythic_instance = await init_mythic()

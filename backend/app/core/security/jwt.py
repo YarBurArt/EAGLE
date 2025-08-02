@@ -1,3 +1,6 @@
+"""
+Module for creating/verify jwt tokens and their validation for authentication
+"""
 import time
 
 import jwt

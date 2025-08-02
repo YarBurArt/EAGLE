@@ -1,3 +1,6 @@
+"""
+Module to defining responses types and format
+"""
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 

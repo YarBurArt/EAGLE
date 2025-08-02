@@ -1,3 +1,7 @@
+"""
+Module for tasks endpoints, also might repeat tasks
+based on chain id or commands and payloads from exported chain
+"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -24,6 +28,7 @@ async def create_new_chain(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> str:
+    """ post endpoint for create chain just by name """
     chain = AttackChain(
         user_id=current_user.user_id,
         chain_name=data.chain_name,
@@ -52,6 +57,8 @@ async def run_local_command(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> LocalCommandResponse:
+    """ post endpoint that get chain -> run command ->
+        save as AttackStep with chain id, combine and return with log """
     # get chain by user_id from get_current_user and chain_name
     chain_ca: AttackChain = await session.execute(
         select(AttackChain).where(
