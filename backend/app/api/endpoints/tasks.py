@@ -14,7 +14,7 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import LocalCommandResponse
 
-from app.cmd.proc import check_and_process_local_cmd
+from app.cmd.proc import check_and_process_local_cmd, get_agent_status
 
 router = APIRouter()
 
@@ -87,3 +87,15 @@ async def run_local_command(
         status=step.status,
         raw_output=step.raw_log
     )
+
+
+@router.get(
+    "/status/{display_id}",
+    description="Get status of agent by callback_display_id"
+)
+async def read_agent_status(
+    display_id: int,
+    current_user: User = Depends(deps.get_current_user),
+) -> str:
+    status = await get_agent_status(display_id)
+    return status

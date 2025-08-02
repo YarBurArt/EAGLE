@@ -38,6 +38,9 @@ async def init_mythic():
 async def check_status(callback_display_id: int) -> str:
     """ check status of agent, if there is display_id in active
         -> agent callback not completely dead """
+    global mythic_instance
+    if mythic_instance is None:
+        mythic_instance = await init_mythic()
     # we need just display_id from active callback
     custom_attributes = """
     display_id
@@ -55,6 +58,9 @@ async def check_status(callback_display_id: int) -> str:
 
 async def get_payload_ids(callback_display_id):
     """ get payload id and uuid from display id """
+    global mythic_instance
+    if mythic_instance is None:
+        mythic_instance = await init_mythic()
     # custom query that will be wrapped in custom_return_attributes for GraphQL
     custom_attributes = """
     host

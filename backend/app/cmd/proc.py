@@ -2,7 +2,7 @@
 module for processing commands in the context of a chain,
 based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
-from app.cmd.c2_tool import execute_local_command
+from app.cmd.c2_tool import execute_local_command, check_status
 from app.models import AttackStep
 
 
@@ -24,6 +24,12 @@ async def init_zero_agent():
         run via subprocess.run, save mythic agent info to db
         save Resource Development info to AttackStep"""
     pass
+
+
+async def get_agent_status(callback_display_id):
+    """ maybe process status, like if fail -> restart agent in chain """
+    status = await check_status(callback_display_id)
+    return status
 
 
 async def check_and_process_local_cmd(cmd: str, c_display_id: int, chain_id):
