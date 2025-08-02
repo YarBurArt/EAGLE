@@ -1,3 +1,6 @@
+"""
+Module to defining requests types and format
+"""
 from pydantic import BaseModel, EmailStr
 
 

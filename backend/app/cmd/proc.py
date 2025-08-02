@@ -27,6 +27,8 @@ async def init_zero_agent():
 
 
 async def check_and_process_local_cmd(cmd: str, c_display_id: int, chain_id):
+    """ async function for check is safe command ->
+        execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
     # for now we leave reconnaissance for /run-command
     output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(

@@ -1,3 +1,7 @@
+"""
+Module that handles all responsibilities and endpoints
+that related to authentication, access tokens, registration
+"""
 import secrets
 import time
 from typing import Any
@@ -78,6 +82,8 @@ async def login_access_token(
     session: AsyncSession = Depends(deps.get_session),
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> AccessTokenResponse:
+    """ get user by email -> compare hashed password
+        return jwt token """
     query = select(User).where(User.email == form_data.username)
     user = await session.scalar(query)
 
@@ -127,6 +133,7 @@ async def refresh_token(
     data: RefreshTokenRequest,
     session: AsyncSession = Depends(deps.get_session),
 ) -> AccessTokenResponse:
+    """ if user authenticated, check and return refresh jwt token """
     token = await session.scalar(
         select(RefreshToken)
         .where(RefreshToken.refresh_token == data.refresh_token)
@@ -182,6 +189,7 @@ async def register_new_user(
     new_user: UserCreateRequest,
     session: AsyncSession = Depends(deps.get_session),
 ) -> User:
+    """ register new user by just unique email and password """
     query = select(User).where(User.email == new_user.email)
     user = await session.scalar(query)
     if user is not None:

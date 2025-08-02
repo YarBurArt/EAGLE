@@ -1,3 +1,6 @@
+"""
+Module for test authorization jwt token scenarios
+"""
 import pytest
 from fastapi import routing, status
 from freezegun import freeze_time

@@ -1,3 +1,7 @@
+"""
+Main module responsible for the upper-level API design,
+security middleware layers, and Swagger parameters
+"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
