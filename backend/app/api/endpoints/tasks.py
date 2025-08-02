@@ -97,5 +97,6 @@ async def read_agent_status(
     display_id: int,
     current_user: User = Depends(deps.get_current_user),
 ) -> str:
+    """ just get status of agent callback """
     status = await get_agent_status(display_id)
     return status
