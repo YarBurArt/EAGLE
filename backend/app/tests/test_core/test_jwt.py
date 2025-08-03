@@ -1,3 +1,6 @@
+"""
+Module for test jwt scenarios and the main weaknesses
+"""
 import time
 
 import pytest

@@ -1,3 +1,6 @@
+"""
+Module for test jwt access token scenarios, their correct http response
+"""
 import time
 
 import pytest

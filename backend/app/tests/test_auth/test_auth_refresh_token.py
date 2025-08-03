@@ -1,3 +1,7 @@
+"""
+Module for test jwt refresh token scenarios, their correct http response
+in the context of a user one-time authentication
+"""
 import time
 
 import pytest
