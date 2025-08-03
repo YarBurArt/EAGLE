@@ -1,3 +1,6 @@
+"""
+Module for test delete self scenarios
+"""
 import pytest
 from fastapi import status
 from httpx import AsyncClient

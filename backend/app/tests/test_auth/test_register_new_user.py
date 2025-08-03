@@ -1,3 +1,6 @@
+"""
+Module for test register scenarios, their correct http response
+"""
 import pytest
 from fastapi import status
 from httpx import AsyncClient

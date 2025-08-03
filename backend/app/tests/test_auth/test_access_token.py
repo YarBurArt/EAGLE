@@ -1,18 +1,23 @@
-import time
-
+"""
+Module for test jwt access token scenarios, their correct http response
+"""
 import pytest
 from fastapi import status
 from freezegun import freeze_time
 from httpx import AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import api_messages
 from app.core.config import get_settings
-from app.core.security.jwt import verify_jwt_token
 from app.main import app
 from app.models import RefreshToken, User
 from app.tests.conftest import default_user_password
+
+from app.tests.test_auth.token_tests_helper import (
+    check_refresh_token, check_token_expire_time,
+    validate_token_response
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -65,13 +70,9 @@ async def test_login_access_token_jwt_has_valid_expire_time(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    token = response.json()
-    current_timestamp = int(time.time())
-    assert (
-        token["expires_at"]
-        == current_timestamp +
-        get_settings().security.jwt_access_token_expire_secs
-    )
+    assert check_token_expire_time(
+        response.json(),
+        get_settings().security.jwt_access_token_expire_secs, "expires_at")
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -89,13 +90,7 @@ async def test_login_access_token_returns_valid_jwt_access_token(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    now = int(time.time())
-    token = response.json()
-    token_payload = verify_jwt_token(token["access_token"])
-
-    assert token_payload.sub == default_user.user_id
-    assert token_payload.iat == now
-    assert token_payload.exp == token["expires_at"]
+    assert validate_token_response(response.json(), default_user.user_id)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -112,12 +107,10 @@ async def test_login_access_token_refresh_token_has_valid_expire_time(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    token = response.json()
-    current_time = int(time.time())
-    assert (
-        token["refresh_token_expires_at"]
-        == current_time + get_settings().security.refresh_token_expire_secs
-    )
+    assert check_token_expire_time(
+        response.json(),
+        get_settings().security.refresh_token_expire_secs,
+        "refresh_token_expires_at")
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -135,14 +128,8 @@ async def test_login_access_token_refresh_token_exists_in_db(
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
 
-    token = response.json()
-
-    token_db_count = await session.scalar(
-        select(
-            func.count()).where(
-            RefreshToken.refresh_token == token["refresh_token"])
-    )
-    assert token_db_count == 1
+    tdc = await check_refresh_token(response.json(), session)
+    assert tdc
 
 
 @pytest.mark.asyncio(loop_scope="session")
