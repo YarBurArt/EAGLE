@@ -32,7 +32,7 @@ Clone repository
 git clone https://github.com/eogod/EAGLE.git
 ```
 ```bash
-cd ./EAGLE
+cd ./EAGLE/backend
 ```
 
 At this point, you need to set .env in EAGLE/backend like this, port of db must be different than Mythic C2 postgres, `MYTHIC__` variables should be taken from your `Mythic/.env`
@@ -65,12 +65,14 @@ Setup database and migrations
 # Setup database
 docker-compose up -d
 
+python3.13 -m poetry shell
+
 # Run Alembic migrations for DB changes
 alembic upgrade head
 ```
 Run backend FastAPI
 ```bash
-python3.13 -m poetry shell
+python3.13 -m poetry shell  # if you exited
 
 uvicorn app.main:app --reload
 ```
