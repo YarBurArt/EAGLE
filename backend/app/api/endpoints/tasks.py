@@ -8,12 +8,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.models import User, AttackChain, AttackStep
+from app.models import (
+    User, AttackChain, AttackStep, CurrentAttackPhase
+)
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest
 )
-from app.schemas.responses import LocalCommandResponse
-
+from app.schemas.responses import (
+    LocalCommandResponse, NewChainResponse
+)
 from app.cmd.proc import check_and_process_local_cmd, get_agent_status
 
 router = APIRouter()
@@ -22,12 +25,13 @@ router = APIRouter()
 @router.post(
     "/new-chain",
     description="Create new chain",
+    response_model=NewChainResponse
 )
 async def create_new_chain(
     data: NewChainRequest,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
-) -> str:
+) -> NewChainResponse:
     """ post endpoint for create chain just by name """
     chain = AttackChain(
         user_id=current_user.user_id,
@@ -35,6 +39,13 @@ async def create_new_chain(
         final_status="execution"
     )
     session.add(chain)
+    # keep track of the current in DB for stability
+    c_phase = CurrentAttackPhase(
+        chain_id=chain.id,
+        phase="Reconnaissance"
+    )
+    session.add(c_phase)
+
     try:
         await session.commit()
     except IntegrityError:
@@ -44,7 +55,10 @@ async def create_new_chain(
             status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    return data.chain_name
+    return NewChainResponse(
+        chain_name=chain.chain_name,
+        current_phase_name=c_phase.phase
+    )
 
 
 @router.post(

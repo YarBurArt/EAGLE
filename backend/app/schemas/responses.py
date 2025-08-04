@@ -21,6 +21,11 @@ class UserResponse(BaseResponse):
     email: EmailStr
 
 
+class NewChainResponse(BaseResponse):
+    chain_name: str
+    current_phase_name: str
+
+
 class LocalCommandResponse(BaseResponse):
     user_id: str
     chain_name: str

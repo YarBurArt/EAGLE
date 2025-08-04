@@ -87,6 +87,12 @@ class AttackChain(Base):
     user: Mapped["User"] = relationship(back_populates="attack_chain")
     attack_step: Mapped[list["AttackStep"]] = relationship(
         back_populates="attack_chain")
+    # audit may take several days, so storing it in the database is easier
+    current_phase: Mapped["CurrentAttackPhase"] = relationship(
+        back_populates="attack_chain",
+        uselist=False,  # each chain has only one current phase.
+        cascade="all, delete-orphan"  # del if c_phase is null
+    )
 
 
 class AttackStep(Base):
@@ -97,6 +103,7 @@ class AttackStep(Base):
     chain_id: Mapped[str] = mapped_column(
         ForeignKey("attack_chain.id", ondelete="CASCADE"),
     )
+    # each step has a specific phase, which can differs from the current
     phase: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=False
     )
@@ -130,6 +137,29 @@ class AttackStep(Base):
     attack_chain: Mapped["AttackChain"] = relationship(
         back_populates="attack_step")
     agent: Mapped[list["Agent"]] = relationship(back_populates="attack_step")
+
+
+class CurrentAttackPhase(Base):
+    __tablename__ = "current_attack_phase"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True
+    )
+    # chain always start with Reconnaissance
+    phase: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="Reconnaissance"
+    )
+    # user_id from attack_chain.user_id if necessary
+    chain_id: Mapped[int] = mapped_column(
+        ForeignKey("attack_chain.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True
+    )
+    # and update_time from base
+    attack_chain: Mapped["AttackChain"] = relationship(
+        back_populates="current_phase"
+    )
 
 
 class Agent(Base):
