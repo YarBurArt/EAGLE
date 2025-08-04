@@ -32,18 +32,20 @@ async def get_agent_status(callback_display_id):
     return status
 
 
-async def check_and_process_local_cmd(cmd: str, c_display_id: int, chain_id):
+async def check_and_process_local_cmd(
+    cmd: str, c_display_id: int, chain_id: int, phase_name: str
+) -> AttackStep:
     """ async function for check is safe command ->
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
-    # for now we leave reconnaissance for /run-command
+    # phase even for local command depends on current or recon
     output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
         cmd, c_display_id
         )
     # TODO: send output to LLM
     attack_step = AttackStep(
         chain_id=chain_id,
-        phase=phases[0],
+        phase=phase_name,
         tool_name=cmd.split()[0],
         command=cmd,
         mythic_task_id=myth_t_id,
