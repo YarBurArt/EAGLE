@@ -15,7 +15,7 @@ from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest
 )
 from app.schemas.responses import (
-    LocalCommandResponse, NewChainResponse
+    LocalCommandResponse, NewChainResponse, GetChainPhaseResponse
 )
 from app.cmd.proc import check_and_process_local_cmd, get_agent_status
 
@@ -56,6 +56,7 @@ async def create_new_chain(
         )
 
     return NewChainResponse(
+        chain_id=chain.id,
         chain_name=chain.chain_name,
         current_phase_name=c_phase.phase
     )
@@ -114,3 +115,36 @@ async def read_agent_status(
     """ just get status of agent callback """
     status = await get_agent_status(display_id)
     return status
+
+
+@router.get(
+    "/chain-phase/{chain_id}",
+    description="Get chain info and UCKC phase"
+)
+async def read_chain_info(
+    chain_id: int,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> GetChainPhaseResponse:
+    """ just get status of agent callback """
+    chain_ca: AttackChain = await session.execute(
+        select(AttackChain).where(
+            AttackChain.id == chain_id,
+            AttackChain.user_id == current_user.user_id
+        )  # can see only own chain
+    )
+    chain_username = current_user.username or f"user#{chain_id}"
+    chain_c_phase: CurrentAttackPhase = await session.execute(
+        select(CurrentAttackPhase).where(
+            CurrentAttackPhase.chain_id == chain_ca.id
+        )
+    )
+    return GetChainPhaseResponse(
+        chain_id=chain_ca.id,
+        user_id=chain_ca.user_id,
+        chain_name=chain_ca.chain_name,
+        username=chain_username,
+        user_email=current_user.email,
+        final_status=chain_ca.final_status,
+        current_phase_name=chain_c_phase.phase
+    )

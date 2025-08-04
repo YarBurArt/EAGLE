@@ -26,6 +26,16 @@ class NewChainResponse(BaseResponse):
     current_phase_name: str
 
 
+class GetChainPhaseResponse(BaseResponse):
+    chain_id: int
+    user_id: str
+    chain_name: str
+    username: str
+    user_email: str
+    final_status: str
+    current_phase_name: str
+
+
 class LocalCommandResponse(BaseResponse):
     user_id: str
     chain_name: str
