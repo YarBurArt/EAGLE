@@ -17,7 +17,8 @@ from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest
 )
 from app.schemas.responses import (
-    LocalCommandResponse, NewChainResponse, GetChainPhaseResponse
+    LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
+    NewPhaseResponse
 )
 from app.cmd.proc import check_and_process_local_cmd, get_agent_status, phases
 
@@ -42,13 +43,13 @@ async def create_new_chain(
         final_status="execution"
     )
     session.add(chain)
+    await session.commit()  # otherwise there will be no id
     # keep track of the current in DB for stability
     c_phase = CurrentAttackPhase(
         chain_id=chain.id,
         phase=phases[0]  # start with recon
     )
     session.add(c_phase)
-
     try:
         await session.commit()
     except IntegrityError:
@@ -131,19 +132,22 @@ async def read_chain_info(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> GetChainPhaseResponse:
-    """ just get status of agent callback """
-    chain_ca: AttackChain = await session.execute(
+    """ get full info about chain phase """
+    chain_ca_list: List[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id,
-            AttackChain.user_id == current_user.user_id
-        )  # can see only own chain
+        )
     )
+    chain_ca: AttackChain = chain_ca_list.scalars().first()
+    await session.commit()
     chain_username = current_user.username or f"user#{chain_id}"
-    chain_c_phase: CurrentAttackPhase = await session.execute(
+    chain_c_phase_list: List[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_ca.id
         )
     )
+    chain_c_phase = chain_c_phase_list.scalars().first()
+    current_phase_n = chain_c_phase.phase or "Reconnaissance"
     return GetChainPhaseResponse(
         chain_id=chain_ca.id,
         user_id=chain_ca.user_id,
@@ -151,5 +155,82 @@ async def read_chain_info(
         username=chain_username,
         user_email=current_user.email,
         final_status=chain_ca.final_status,
-        current_phase_name=chain_c_phase.phase
+        current_phase_name=current_phase_n
+    )
+
+
+@router.post(
+    "/next-phase/{chain_id}",
+    description="Switch to the next chain phase",
+    response_model=NewPhaseResponse
+)
+async def next_phase(
+    chain_id: int,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> NewPhaseResponse:
+    """ switch to next by UCKC phases list """
+    res_phase: List[CurrentAttackPhase] = await session.execute(
+        select(CurrentAttackPhase).where(
+            CurrentAttackPhase.chain_id == chain_id
+        )
+    )
+    # users should only know the numbers of their chains
+    c_phase: CurrentAttackPhase = res_phase.scalars().first()
+    try:
+        idx = phases.index(c_phase.phase)  # from proc or config
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown phase, check UCKC phases"
+        )
+    if idx + 1 >= len(phases):
+        raise HTTPException(
+            status_code=400,
+            detail="Already last phase, try to find a way to save the chain."
+        )
+    c_phase.phase = phases[idx + 1]  # temp: by tuple plus 1
+    # already check exceptions
+    await session.commit()
+    return NewPhaseResponse(
+        chain_id=c_phase.chain_id,
+        current_phase_name=c_phase.phase
+    )
+
+
+@router.post(
+    "/set-phase/{chain_id}",
+    description="Switch to the specific chain phase",
+    response_model=NewPhaseResponse
+)
+async def set_phase(
+    chain_id: int,
+    phase_name: str,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> NewPhaseResponse:
+    """ switch to the specific phase in UCKC phases list """
+    if phase_name not in phases:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown phase, check UCKC phases"
+        )
+    # check by id for phase in chain
+    res_phase: List[CurrentAttackPhase] = await session.execute(
+        select(CurrentAttackPhase).where(
+            CurrentAttackPhase.chain_id == chain_id
+        )
+    )
+    c_phase: CurrentAttackPhase = res_phase.scalars().first()
+    if not c_phase:
+        # add if no current phase
+        c_phase = CurrentAttackPhase(chain_id=chain_id, phase=phase_name)
+        session.add(c_phase)
+    else:
+        # or just switch the phase
+        c_phase.phase = phase_name
+    await session.commit()
+    return NewPhaseResponse(
+        chain_id=c_phase.chain_id,
+        current_phase_name=c_phase.phase
     )
