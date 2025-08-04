@@ -2,6 +2,8 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -17,7 +19,8 @@ from app.schemas.requests import (
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse
 )
-from app.cmd.proc import check_and_process_local_cmd, get_agent_status
+from app.cmd.proc import check_and_process_local_cmd, get_agent_status, phases
+
 
 router = APIRouter()
 
@@ -42,7 +45,7 @@ async def create_new_chain(
     # keep track of the current in DB for stability
     c_phase = CurrentAttackPhase(
         chain_id=chain.id,
-        phase="Reconnaissance"
+        phase=phases[0]  # start with recon
     )
     session.add(c_phase)
 
@@ -75,16 +78,18 @@ async def run_local_command(
     """ post endpoint that get chain -> run command ->
         save as AttackStep with chain id, combine and return with log """
     # get chain by user_id from get_current_user and chain_name
-    chain_ca: AttackChain = await session.execute(
+    chain_ca: List[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.user_id == current_user.user_id,
             AttackChain.chain_name == data.chain_name
         )
     )
-    chain_c = chain_ca.scalars().first()  # get first object of select
+    # get first object of select
+    chain_c: AttackChain = chain_ca.scalars().first()
+    phase_name: str = chain_c.current_phase.phase or "Reconnaissance"
     # zero agent must be already deployed, thats why we need display id
     step: AttackStep = await check_and_process_local_cmd(
-        data.command, data.callback_display_id, chain_c.id)
+        data.command, data.callback_display_id, chain_c.id, phase_name)
     # add attack step with phase
     session.add(step)
     try:
