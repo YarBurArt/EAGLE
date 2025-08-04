@@ -52,12 +52,12 @@ async def create_new_chain(
     session.add(c_phase)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-        )
+        ) from exc
 
     return NewChainResponse(
         chain_id=chain.id,
@@ -95,8 +95,12 @@ async def run_local_command(
     session.add(step)
     try:
         await session.commit()
-    except IntegrityError:
+    except IntegrityError as exc:
         await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+        ) from exc
 
     return LocalCommandResponse(
         user_id=current_user.user_id,
@@ -119,8 +123,8 @@ async def read_agent_status(
     current_user: User = Depends(deps.get_current_user),
 ) -> str:
     """ just get status of agent callback """
-    status = await get_agent_status(display_id)
-    return status
+    status_agent = await get_agent_status(display_id)
+    return status_agent
 
 
 @router.get(
@@ -179,11 +183,11 @@ async def next_phase(
     c_phase: CurrentAttackPhase = res_phase.scalars().first()
     try:
         idx = phases.index(c_phase.phase)  # from proc or config
-    except ValueError:
+    except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail="Unknown phase, check UCKC phases"
-        )
+        ) from exc
     if idx + 1 >= len(phases):
         raise HTTPException(
             status_code=400,

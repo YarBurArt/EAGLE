@@ -206,12 +206,12 @@ async def register_new_user(
 
     try:
         await session.commit()
-    except IntegrityError:  # pragma: no cover
+    except IntegrityError as exc:  # pragma: no cover
         await session.rollback()
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=api_messages.EMAIL_ADDRESS_ALREADY_USED,
-        )
+        ) from exc
 
     return user
