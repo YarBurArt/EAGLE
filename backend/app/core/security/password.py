@@ -1,15 +1,18 @@
+""" Module for password operations by bcrypt lib """
 import bcrypt
 
 from app.core.config import get_settings
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """ verify pasword by hash and password string """
     return bcrypt.checkpw(
         plain_password.encode("utf-8"), hashed_password.encode("utf-8")
     )
 
 
 def get_password_hash(password: str) -> str:
+    """ get hash of password string with salt """
     return bcrypt.hashpw(
         password.encode(),
         bcrypt.gensalt(get_settings().security.password_bcrypt_rounds),

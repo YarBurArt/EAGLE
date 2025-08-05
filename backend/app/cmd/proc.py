@@ -96,6 +96,7 @@ PHASE_COMMANDS = {
     ],
 }
 
+
 async def init_zero_agent():
     """ generate payload ->
         download by mythic_payload_uuid ->
@@ -117,7 +118,10 @@ async def check_and_process_local_cmd(
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
     # phase even for local command depends on current or recon
-    assert is_command_allowed_in_phase(cmd, phase_name), f"Command not allowed in phase {phase_name}"
+    assert is_command_allowed_in_phase(
+        cmd, phase_name
+    ), f"Command not allowed in phase {phase_name}"
+    # send command to C2
     output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
         cmd, c_display_id
         )
@@ -137,17 +141,25 @@ async def check_and_process_local_cmd(
 
 
 def is_command_allowed_in_phase(cmd: str, phase_name: str) -> bool:
+    """ check command for allowed, we dont want to ransomware """
     allowed_commands = get_commands_for_phase(phase_name)
     # Можно сделать частичное совпадение или регулярки
-    return any(cmd.strip().startswith(allowed.split()[0]) for allowed in allowed_commands)
+    return any(
+        cmd.strip().startswith(
+            allowed.split()[0]
+        ) for allowed in allowed_commands
+    )
 
 
 def get_commands_for_phase(phase_name: str):
+    """ get spicific command for phase, format """
     return PHASE_COMMANDS.get(phase_name, [])
+
 
 async def suggest_actions_for_phase(phase_name: str) -> list[str]:
     """Return list of suggested commands for given phase"""
     return get_commands_for_phase(phase_name)
+
 
 async def generate_action_suggestions_with_llm(phase_name: str, context_summary: str = ""):
     """Use LLM to refine suggestions based on summary or logs"""

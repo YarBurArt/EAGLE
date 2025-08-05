@@ -1,5 +1,4 @@
-# SQLAlchemy async engine and sessions tools
-#
+""" Module for SQLAlchemy async engine and sessions tools """
 # https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html
 #
 # for pool size configuration:
@@ -18,6 +17,7 @@ from app.core.config import get_settings
 
 
 def new_async_engine(uri: URL) -> AsyncEngine:
+    """ just connect to DB and create connection pool engine """
     return create_async_engine(
         uri,
         pool_pre_ping=True,
@@ -33,4 +33,5 @@ _ASYNC_SESSIONMAKER = async_sessionmaker(_ASYNC_ENGINE, expire_on_commit=False)
 
 
 def get_async_session() -> AsyncSession:  # pragma: no cover
+    """ get session from pool from AsyncEngine """
     return _ASYNC_SESSIONMAKER()

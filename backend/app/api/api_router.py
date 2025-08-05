@@ -1,3 +1,4 @@
+""" module for route http paths, format http responses """
 from fastapi import APIRouter
 
 from app.api import api_messages
