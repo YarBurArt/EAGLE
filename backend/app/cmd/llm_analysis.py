@@ -3,8 +3,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
 from llm_service import LLMService
-from app.core.security import get_current_active_user # todo
-from app.core.config import Settings
+# from app.core.security import get_current_active_user # todo
+from ..core.config import Settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

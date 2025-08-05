@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     database: Database = Field(default_factory=Database)
     mythic: Mythic = Field(default_factory=Mythic)
     log_level: str = "INFO"
+    LLM_API_URL: str = "http://localhost:69228"  # Для локального Ollama
+    LLM_API_KEY: str = None
+    LLM_TIMEOUT: int = 120
+    LLM_DEFAULT_MODEL: str = "mistral"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -115,11 +119,3 @@ def logging_config(log_level: str) -> None:
 logging_config(log_level=get_settings().log_level)
 
 
-class Settings(BaseSettings):
-    LLM_API_URL: str = "http://localhost:69228"  # Для локального Ollama
-    LLM_API_KEY: str = None
-    LLM_TIMEOUT: int = 120
-    LLM_DEFAULT_MODEL: str = "mistral"
-
-    class Config:
-        env_file = ".env"
