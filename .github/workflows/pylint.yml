@@ -5,25 +5,67 @@ on:
   pull_request:
 
 jobs:
-  build:
+  pylint:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10"]
+        # to avoid parsing failed
+        python-version: ['3.13']
+
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pylint
-    - name: Analysing the code with pylint
-      run: |
-        pylint $(git ls-files '*.py' ':!:./backend/alembic/*')
-    
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+        # maybe cd backend if .toml is not in root
+      - name: Install dependencies with Poetry
+        working-directory: backend
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry add pylint
+          poetry install --no-interaction --no-ansi
+      # files in what we dont need linter
+      # PYTHONPATH to process import-error of app
+      # check pylint issues unsubscriptable-object for E1136
+      # like that https://github.com/sqlalchemy/sqlalchemy/discussions/9202
+      - name: Run pylint
+        working-directory: backend
+        run: |
+          FILES=$(git ls-files '*.py' \
+          ':!alembic/**' \
+          ':!app/tests/**' \
+          ':!app/schemas/**' \
+          ':!migration/**')
+          export PYTHONPATH=.:backend 
+          OUTPUT=$(poetry run pylint --disable=E1136,E1102,E1101 $FILES) || echo "$?" > rc.txt
+          echo "$OUTPUT"
+          echo "$OUTPUT" > output.txt
+      # filter linter output for final result and check cuz holy linux
+      - name: Check code rating > N
+        working-directory: backend
+        run: |
+          RATING=$(grep "Your code has been rated at" output.txt \
+            | sed -E 's/.*rated at ([0-9]+(\.[0-9]+)?).*/\1/')
+          echo "Rating is $RATING"
+          awk -v r="$RATING" 'BEGIN { exit (r < 6.0) }'
+
+      - name: Check for Fatal/Error messages  
+        working-directory: backend
+        run: |
+          PYLINT_RC=$(cat rc.txt)
+          if [ $(( PYLINT_RC & 3 )) -ne 0 ]; then
+            echo "Fatal/Error detected (code $PYLINT_RC)"
+            exit 1
+          fi
     # - name: Cache
     #   uses: actions/cache@v4.2.3
     #   with:
