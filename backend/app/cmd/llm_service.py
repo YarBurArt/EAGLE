@@ -1,13 +1,15 @@
 import logging
 from typing import Dict, Any, Optional
-import httpx
-from ..core.config import Settings
+# import httpx
+# from ..core.config import Settings
+from app.core.config import Settings
 from llm_connector import LLMConnector
 
 logger = logging.getLogger(__name__)
 
 
 class LLMService:
+    """ service for unified access to various LLM """
     def __init__(self):
         self.connector = LLMConnector(
             base_url=Settings.LLM_API_URL,

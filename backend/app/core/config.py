@@ -1,4 +1,4 @@
-# File with environment variables and general configuration logic.
+""" config with environment variables and general configuration logic."""
 # Env variables are combined in nested groups like "Security", "Database" etc.
 # So environment variable (case-insensitive) for jwt_secret_key will be
 # "security__jwt_secret_key"
@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def sqlalchemy_database_uri(self) -> URL:
+        """ setup main db uri to connect """
         return URL.create(
             drivername="postgresql+asyncpg",
             username=self.database.username,
@@ -89,6 +90,7 @@ def get_settings() -> Settings:
 
 
 def logging_config(log_level: str) -> None:
+    """ setup logging format """
     conf = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -117,5 +119,3 @@ def logging_config(log_level: str) -> None:
 
 
 logging_config(log_level=get_settings().log_level)
-
-

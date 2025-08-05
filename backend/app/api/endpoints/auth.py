@@ -145,12 +145,13 @@ async def refresh_token(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=api_messages.REFRESH_TOKEN_NOT_FOUND,
         )
-    elif time.time() > token.exp:
+    # not elif cuz else raise
+    if time.time() > token.exp:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=api_messages.REFRESH_TOKEN_EXPIRED,
         )
-    elif token.used:
+    if token.used:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=api_messages.REFRESH_TOKEN_ALREADY_USED,

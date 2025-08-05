@@ -1,4 +1,4 @@
-# SQL Alchemy models declaration.
+""" Module for SQL Alchemy models declaration """
 # https://docs.sqlalchemy.org/en/20/orm/quickstart.html#declare-models
 # mapped_column syntax from SQLAlchemy 2.0.
 

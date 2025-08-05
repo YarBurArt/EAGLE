@@ -3,8 +3,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
 from llm_service import LLMService
+from app.api import deps
 # from app.core.security import get_current_active_user # todo
-from ..core.config import Settings
+# from ..core.config import Settings
+# from app.core.config import Settings
+
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -28,14 +31,16 @@ class LLMAnalysisResponse(BaseModel):
 @router.post("/analyze", response_model=LLMAnalysisResponse)
 async def analyze_with_llm(
         request: LLMAnalysisRequest,
-        current_user: dict = Depends(get_current_active_user),
+        current_user: dict = Depends(deps.get_current_user),
         llm_service: LLMService = Depends()
 ):
     """
     use llm analysis using local model
     """
     try:
-        logger.info(f"LLM analysis request from user {current_user['username']}")
+        logger.info(
+            f"LLM analysis request from user {current_user['username']}"
+        )
 
         # Call LLM service
         response = await llm_service.generate(
@@ -58,12 +63,12 @@ async def analyze_with_llm(
         raise HTTPException(
             status_code=500,
             detail=f"LLM processing failed: {str(e)}"
-        )
+        ) from e
 
 
 @router.get("/models")
 async def get_available_models(
-        current_user: dict = Depends(get_current_active_user),
+        current_user: dict = Depends(deps.get_current_user),
         llm_service: LLMService = Depends()
 ):
     """
@@ -77,4 +82,4 @@ async def get_available_models(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fetch models: {str(e)}"
-        )
+        ) from e
