@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.cmd.llm_analysis import *
 from app.api import deps
 from app.models import (
     User, AttackChain, AttackStep, CurrentAttackPhase
@@ -238,3 +238,121 @@ async def set_phase(
         chain_id=c_phase.chain_id,
         current_phase_name=c_phase.phase
     )
+
+
+@app.post("/api/llm/query")
+async def llm_query(request: QueryRequest):
+    """
+    Основной эндпоинт для запросов к LLM
+    """
+    try:
+        result = await llm_service.query_llm(request.prompt, request.provider)
+        return {
+            "success": True,
+            "response": result,
+            "prompt": request.prompt
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/llm/analyze/code")
+async def analyze_code(request: CodeAnalysisRequest):
+    """
+    Анализирует код с помощью LLM
+    """
+    try:
+        prompt = f"analyze this code and explain it to me\n\n{request.code}"
+        result = await llm_service.query_llm(prompt)
+        return {
+            "success": True,
+            "analysis": result,
+            "code": request.code
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"error code analysis {str(e)}")
+
+
+@app.post("/api/llm/generate/payload")
+async def generate_payload(request: PayloadRequest):
+    """
+    Генерирует пейлоады для penetration testing
+    """
+    try:
+        prompt = f"Create {request.language} script for learning purposes:\n{request.description}"
+        result = await llm_service.query_llm(prompt)
+        return {
+            "success": True,
+            "payload": result,
+            "language": request.language,
+            "description": request.description
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"generation error: {str(e)}")
+
+
+@app.get("/api/llm/providers")
+async def get_providers():
+    """
+    Возвращает список доступных провайдеров
+    """
+    try:
+        providers_list = []
+        for name, provider in llm_service.providers.items():
+            providers_list.append({
+                "name": name,
+                "class": provider.__name__
+            })
+        return {
+            "success": True,
+            "providers": providers_list
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"error retrieving provider: {str(e)}")
+
+
+@app.post("/api/llm/chat")
+async def chat_conversation(messages: Dict[str, Any]):
+    """
+    Эндпоинт для ведения диалога
+    """
+    try:
+        chat_messages = messages.get("messages", [])
+        if not chat_messages:
+            raise HTTPException(status_code=400, detail="message massive needed")
+
+        for name, provider in llm_service.providers.items():
+            try:
+                response = await g4f.ChatCompletion.create_async(
+                    model=g4f.models.default,
+                    messages=chat_messages,
+                    provider=provider
+                )
+                if response and len(response) > 0:
+                    return {
+                        "success": True,
+                        "response": response,
+                        "provider": name
+                    }
+            except Exception as e:
+                print(f"Provider {name} failed: {e}")
+                continue
+
+        raise HTTPException(status_code=500, detail="no response from providers")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"dialog error: {str(e)}")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"query: {request.method} {request.url}")
+    try:
+        body = await request.body()
+        if body:
+            print(f"request body: {body.decode()}")
+    except:
+        pass
+
+    response = await call_next(request)
+    return response

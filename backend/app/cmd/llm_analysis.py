@@ -1,85 +1,74 @@
-import logging
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional, Dict, Any
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from llm_service import LLMService
-from app.api import deps
-# from app.core.security import get_current_active_user # todo
-# from ..core.config import Settings
-# from app.core.config import Settings
+from typing import Optional, Dict, Any
+import g4f
+import asyncio
+import json
+
+# Настройка g4f
+g4f.debug.logging = True
 
 
-router = APIRouter()
-logger = logging.getLogger(__name__)
-
-
-class LLMAnalysisRequest(BaseModel):
+class QueryRequest(BaseModel):
     prompt: str
-    model: Optional[str] = "mistral"
-    temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 1000
-    context: Optional[Dict[str, Any]] = None
+    provider: Optional[str] = None
 
 
-class LLMAnalysisResponse(BaseModel):
-    analysis_result: str
-    model_used: str
-    tokens_consumed: int
-    status: str
+class CodeAnalysisRequest(BaseModel):
+    code: str
 
 
-@router.post("/analyze", response_model=LLMAnalysisResponse)
-async def analyze_with_llm(
-        request: LLMAnalysisRequest,
-        current_user: dict = Depends(deps.get_current_user),
-        llm_service: LLMService = Depends()
-):
-    """
-    use llm analysis using local model
-    """
-    try:
-        logger.info(
-            f"LLM analysis request from user {current_user['username']}"
-        )
-
-        # Call LLM service
-        response = await llm_service.generate(
-            prompt=request.prompt,
-            model=request.model,
-            temperature=request.temperature,
-            max_tokens=request.max_tokens,
-            context=request.context
-        )
-
-        return LLMAnalysisResponse(
-            analysis_result=response["result"],
-            model_used=response["model"],
-            tokens_consumed=response["tokens_used"],
-            status="success"
-        )
-
-    except Exception as e:
-        logger.error(f"LLM analysis failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"LLM processing failed: {str(e)}"
-        ) from e
+class PayloadRequest(BaseModel):
+    description: str
+    language: Optional[str] = "python"
 
 
-@router.get("/models")
-async def get_available_models(
-        current_user: dict = Depends(deps.get_current_user),
-        llm_service: LLMService = Depends()
-):
-    """
-    get available llm models
-    """
-    try:
-        models = await llm_service.get_available_models()
-        return {"models": models, "status": "success"}
-    except Exception as e:
-        logger.error(f"Failed to fetch models: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch models: {str(e)}"
-        ) from e
+class LLMService:
+    def __init__(self):
+        self.providers = {
+            "bing": g4f.Provider.Bing,
+            "you": g4f.Provider.You,
+            "aichat": g4f.Provider.Aichat,
+        }
+
+    async def query_llm(self, prompt: str, provider_name: str = None) -> str:
+        """
+        Отправляет запрос к бесплатным LLM через g4f
+        """
+        try:
+            # Если указан провайдер, используем его
+            if provider_name and provider_name in self.providers:
+                provider = self.providers[provider_name]
+                try:
+                    response = await g4f.ChatCompletion.create_async(
+                        model=g4f.models.default,
+                        messages=[{"role": "user", "content": prompt}],
+                        provider=provider
+                    )
+                    return response
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=f"Provider {provider_name} failed: {str(e)}")
+
+            # Если провайдер не указан или не найден, пробуем разные
+            for name, provider in self.providers.items():
+                try:
+                    response = await g4f.ChatCompletion.create_async(
+                        model=g4f.models.default,
+                        messages=[{"role": "user", "content": prompt}],
+                        provider=provider
+                    )
+                    if response and len(response) > 0:
+                        return response
+                except Exception as e:
+                    print(f"Provider {name} failed: {e}")
+                    continue
+
+            return "Не удалось получить ответ от ни одного провайдера"
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка при запросе к LLM: {str(e)}")
+
+
+# Инициализация сервиса
+llm_service = LLMService()
