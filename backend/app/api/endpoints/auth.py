@@ -104,21 +104,21 @@ async def login_access_token(
 
     jwt_token = create_jwt_token(user_id=user.user_id)
 
-    refresh_token = RefreshToken(
+    refresh_token_new = RefreshToken(
         user_id=user.user_id,
         refresh_token=secrets.token_urlsafe(32),
         exp=int(
             time.time() +
             get_settings().security.refresh_token_expire_secs),
     )
-    session.add(refresh_token)
+    session.add(refresh_token_new)
     await session.commit()
 
     return AccessTokenResponse(
         access_token=jwt_token.access_token,
         expires_at=jwt_token.payload.exp,
-        refresh_token=refresh_token.refresh_token,
-        refresh_token_expires_at=refresh_token.exp,
+        refresh_token=refresh_token_new.refresh_token,
+        refresh_token_expires_at=refresh_token_new.exp,
     )
 
 
@@ -162,21 +162,21 @@ async def refresh_token(
 
     jwt_token = create_jwt_token(user_id=token.user_id)
 
-    refresh_token = RefreshToken(
+    refresh_token_new = RefreshToken(
         user_id=token.user_id,
         refresh_token=secrets.token_urlsafe(32),
         exp=int(
             time.time() +
             get_settings().security.refresh_token_expire_secs),
     )
-    session.add(refresh_token)
+    session.add(refresh_token_new)
     await session.commit()
 
     return AccessTokenResponse(
         access_token=jwt_token.access_token,
         expires_at=jwt_token.payload.exp,
-        refresh_token=refresh_token.refresh_token,
-        refresh_token_expires_at=refresh_token.exp,
+        refresh_token=refresh_token_new.refresh_token,
+        refresh_token_expires_at=refresh_token_new.exp,
     )
 
 
