@@ -15,6 +15,7 @@ from app.cmd.llm_analysis import (
     llm_service, PayloadRequest, QueryRequest, CodeAnalysisRequest
 )
 from app.api import deps
+from app.core.config import phases
 from app.models import (
     User, AttackChain, AttackStep, CurrentAttackPhase
 )
@@ -25,7 +26,7 @@ from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
     NewPhaseResponse
 )
-from app.cmd.proc import check_and_process_local_cmd, get_agent_status, phases
+from app.cmd.proc import check_and_process_local_cmd, get_agent_status
 
 
 router = APIRouter()
@@ -285,6 +286,7 @@ async def generate_payload(request: PayloadRequest):
     Генерирует пейлоады для penetration testing
     """
     try:
+        # TODO: generate also commands on agent, send user to execute
         prompt = f"Create {request.language} script for learning purposes:\n{request.description}"
         result = await llm_service.query_llm(prompt)
         return {
@@ -298,6 +300,8 @@ async def generate_payload(request: PayloadRequest):
             status_code=500,
             detail=f"generation error: {str(e)}"
         ) from e
+
+# TODO: endpoint for approved action and execute save to AttackStep
 
 
 @router.get("/api/llm/providers")

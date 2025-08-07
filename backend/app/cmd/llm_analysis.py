@@ -36,6 +36,7 @@ class LLMService:
         """
         Отправляет запрос к бесплатным LLM через g4f
         """
+        # TODO: support custom system prompt
         try:
             # Если указан провайдер, используем его
             if provider_name and provider_name in self.providers:
