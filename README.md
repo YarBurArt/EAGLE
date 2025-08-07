@@ -53,6 +53,13 @@ MYTHIC__PASSWORD=super_secret_password
 MYTHIC__SERVER_PORT=7443
 MYTHIC__TIMEOUT=-1
 ```
+If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also 
+```env
+LLMSERVICE__API_URL=http://localhost:69228
+LLMSERVICE__API_KEY=super_secret_key
+LLMSERVICE__TIMEOUT=120
+LLMSERVICE__DEFAULT_MODEL=mistral
+```
 Install dependencies
 ```bash
 # Poetry install (python3.13)
