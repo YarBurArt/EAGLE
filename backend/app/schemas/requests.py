@@ -20,6 +20,8 @@ class UserUpdatePasswordRequest(BaseRequest):
 class UserCreateRequest(BaseRequest):
     email: EmailStr
     password: str
+    role: str
+    username: str
 
 
 class NewChainRequest(BaseRequest):

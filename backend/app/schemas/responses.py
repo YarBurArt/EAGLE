@@ -19,6 +19,8 @@ class AccessTokenResponse(BaseResponse):
 class UserResponse(BaseResponse):
     user_id: str
     email: EmailStr
+    role: str
+    username: str
 
 
 class NewChainResponse(BaseResponse):

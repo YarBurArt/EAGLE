@@ -27,9 +27,9 @@ class PayloadRequest(BaseModel):
 class LLMService:
     def __init__(self):
         self.providers = {
-            "bing": g4f.Provider.Bing,
+            "bing": g4f.Provider.bing,
             "you": g4f.Provider.You,
-            "aichat": g4f.Provider.Aichat,
+            "aichat": g4f.Provider.Chatai,
         }
 
     async def query_llm(self, prompt: str, provider_name: str = None) -> str:

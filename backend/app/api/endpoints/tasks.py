@@ -2,13 +2,18 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
-from typing import List
+from typing import List, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import g4f  # temp
+from fastapi import (
+    APIRouter, Depends, HTTPException, status, Request
+)
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.cmd.llm_analysis import *
+from app.cmd.llm_analysis import (
+    llm_service, PayloadRequest, QueryRequest, CodeAnalysisRequest
+)
 from app.api import deps
 from app.models import (
     User, AttackChain, AttackStep, CurrentAttackPhase
@@ -240,7 +245,7 @@ async def set_phase(
     )
 
 
-@app.post("/api/llm/query")
+@router.post("/api/llm/query")
 async def llm_query(request: QueryRequest):
     """
     Основной эндпоинт для запросов к LLM
@@ -256,7 +261,7 @@ async def llm_query(request: QueryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/llm/analyze/code")
+@router.post("/api/llm/analyze/code")
 async def analyze_code(request: CodeAnalysisRequest):
     """
     Анализирует код с помощью LLM
@@ -273,7 +278,7 @@ async def analyze_code(request: CodeAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"error code analysis {str(e)}")
 
 
-@app.post("/api/llm/generate/payload")
+@router.post("/api/llm/generate/payload")
 async def generate_payload(request: PayloadRequest):
     """
     Генерирует пейлоады для penetration testing
@@ -288,10 +293,13 @@ async def generate_payload(request: PayloadRequest):
             "description": request.description
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"generation error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"generation error: {str(e)}"
+        ) from e
 
 
-@app.get("/api/llm/providers")
+@router.get("/api/llm/providers")
 async def get_providers():
     """
     Возвращает список доступных провайдеров
@@ -308,10 +316,13 @@ async def get_providers():
             "providers": providers_list
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"error retrieving provider: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"error retrieving provider: {str(e)}"
+        ) from e
 
 
-@app.post("/api/llm/chat")
+@router.post("/api/llm/chat")
 async def chat_conversation(messages: Dict[str, Any]):
     """
     Эндпоинт для ведения диалога
@@ -341,17 +352,19 @@ async def chat_conversation(messages: Dict[str, Any]):
         raise HTTPException(status_code=500, detail="no response from providers")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"dialog error: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"dialog error: {str(e)}"
+        ) from e  # to track traceback
 
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
+# @router.add_middleware("http") FIXME: middleware to main
+async def log_requests_body(request: Request, call_next):
     print(f"query: {request.method} {request.url}")
     try:
         body = await request.body()
         if body:
             print(f"request body: {body.decode()}")
-    except:
+    except Exception:
         pass
 
     response = await call_next(request)
