@@ -8,6 +8,9 @@ import g4f  # temp
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
 )
+from datetime import datetime
+from typing import Optional
+from app.cmd.c2_tool import execute_local_command
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,11 +29,29 @@ from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
     NewPhaseResponse
 )
-from app.cmd.proc import check_and_process_local_cmd, get_agent_status
+from app.cmd.proc import check_and_process_local_cmd, get_agent_status, analyze_command_output_with_llm
+from pydantic import BaseModel
 
 
 router = APIRouter()
 
+class ActionApprovalRequest(BaseModel):
+    """Модель запроса для одобрения действий"""
+    command: str
+    agent_id: int
+    chain_id: int
+    phase: str
+    approved_by: str
+    reason: Optional[str] = ""
+
+class ActionExecutionRequest(BaseModel):
+    """Модель запроса для выполнения одобренных действий"""
+    command: str
+    agent_display_id: int
+    chain_id: int
+    phase: str
+    approved_by: str
+    context: Optional[str] = ""
 
 @router.post(
     "/new-chain",
@@ -116,8 +137,7 @@ async def run_local_command(
         tool_name=step.tool_name,
         command=step.command,
         status=step.status,
-        raw_output=step.raw_log,
-        llm_analysis=llm_a
+        raw_output=step.raw_log
     )
 
 
@@ -279,19 +299,48 @@ async def analyze_code(request: CodeAnalysisRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"error code analysis {str(e)}")
 
-
 @router.post("/api/llm/generate/payload")
 async def generate_payload(request: PayloadRequest):
     """
     Генерирует пейлоады для penetration testing
     """
     try:
-        # TODO: generate also commands on agent, send user to execute
         prompt = f"Create {request.language} script for learning purposes:\n{request.description}"
         result = await llm_service.query_llm(prompt)
+        commands_prompt = f"""
+        Based on this {request.language} script, generate commands that an agent would need to execute:
+
+        Script:
+        {result}
+
+        Please provide:
+        1. Setup commands (installation, dependencies)
+        2. Execution commands
+        3. Verification commands
+        4. Cleanup commands
+
+        Format as JSON with fields: setup_commands, execution_commands, verification_commands, cleanup_commands
+        Each field should be an array of command strings.
+        """
+
+        commands_result = await llm_service.query_llm(commands_prompt)
+
+        # Пытаемся распарсить команды
+        try:
+            import json
+            commands_data = json.loads(commands_result)
+        except json.JSONDecodeError:
+            commands_data = {
+                "setup_commands": [],
+                "execution_commands": [],
+                "verification_commands": [],
+                "cleanup_commands": []
+            }
+
         return {
             "success": True,
             "payload": result,
+            "commands": commands_data,
             "language": request.language,
             "description": request.description
         }
@@ -301,7 +350,113 @@ async def generate_payload(request: PayloadRequest):
             detail=f"generation error: {str(e)}"
         ) from e
 
-# TODO: endpoint for approved action and execute save to AttackStep
+
+@router.post("/api/llm/action/approve")
+async def approve_action(action_request: ActionApprovalRequest):
+    """
+    Endpoint for approved actions and execution with saving to AttackStep
+    """
+    try:
+        # Execute the approved action
+        output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
+            action_request.command,
+            action_request.agent_id
+        )
+
+        # Send output to LLM for analysis
+        llm_analysis = await analyze_command_output_with_llm(
+            action_request.command,
+            output
+        )
+
+        # Create AttackStep record
+        attack_step = AttackStep(
+            chain_id=action_request.chain_id,
+            phase=action_request.phase,
+            tool_name=action_request.command.split()[0],
+            command=action_request.command,
+            mythic_task_id=myth_t_id,
+            mythic_payload_uuid=myth_p_uuid,
+            mythic_payload_id=myth_p_id,
+            raw_log=output,
+            status="success"
+        )
+
+        return {
+            "success": True,
+            "attack_step": attack_step,
+            "message": "Action executed and saved successfully"
+        }
+
+    except Exception as e:
+        # Save error to AttackStep
+        attack_step = AttackStep(
+            chain_id=action_request.chain_id,
+            phase=action_request.phase,
+            tool_name=action_request.command.split()[0],
+            command=action_request.command,
+            mythic_task_id="",
+            mythic_payload_uuid="",
+            mythic_payload_id="",
+            raw_log=str(e),
+            status="error"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error executing approved action: {str(e)}"
+        ) from e
+
+
+@router.post("/api/llm/action/execute")
+async def execute_approved_action(action_request: ActionExecutionRequest):
+    """
+    Endpoint for executing approved actions with results saving
+    """
+    try:
+        # Validate request
+        if not action_request.command:
+            raise HTTPException(
+                status_code=400,
+                detail="Command is required"
+            )
+        # Execute command on agent
+        output, mythic_task_id, mythic_payload_id, mythic_payload_uuid = await execute_local_command(
+            action_request.command,
+            action_request.agent_display_id
+        )
+
+        # Analyze output with LLM
+        llm_analysis_result = await analyze_command_output_with_llm(
+            action_request.command,
+            output
+        )
+
+        # Create AttackStep object
+        attack_step = AttackStep(
+            chain_id=action_request.chain_id,
+            phase=action_request.phase,
+            tool_name=action_request.command.split()[0],
+            command=action_request.command,
+            mythic_task_id="",
+            mythic_payload_uuid="",
+            mythic_payload_id="",
+            raw_log=output,
+            status="success"
+        )
+        return {
+            "success": True,
+            "attack_step": attack_step,
+            "message": "Action executed and saved to AttackStep successfully"
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to execute approved action: {str(e)}"
+        ) from e
+
+
+
 
 
 @router.get("/api/llm/providers")
