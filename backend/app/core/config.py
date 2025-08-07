@@ -27,6 +27,9 @@ from sqlalchemy.engine.url import URL
 
 PROJECT_DIR = Path(__file__).parent.parent.parent
 
+# global in app settings without validation
+LOG_LEVEL: str = "INFO"
+
 
 class Security(BaseModel):
     jwt_issuer: str = "my-app"
@@ -54,15 +57,21 @@ class Mythic(BaseModel):
     timeout: int = -1
 
 
+class LLMservice(BaseModel):
+    """ env format like LLMSERVICE__API_URL=http... """
+    API_URL: str = "http://localhost:69228"  # Для локального Ollama
+    API_KEY: str = None
+    TIMEOUT: int = 120
+    DEFAULT_MODEL: str = "mistral"
+
+
 class Settings(BaseSettings):
+    """ only to validate settings by pydantic """
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
     mythic: Mythic = Field(default_factory=Mythic)
-    log_level: str = "INFO"
-    LLM_API_URL: str = "http://localhost:69228"  # Для локального Ollama
-    LLM_API_KEY: str = None
-    LLM_TIMEOUT: int = 120
-    LLM_DEFAULT_MODEL: str = "mistral"
+    # if no vars in .env -> take from factory
+    llmservice: LLMservice = Field(default_factory=LLMservice)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -118,4 +127,4 @@ def logging_config(log_level: str) -> None:
     logging.config.dictConfig(conf)
 
 
-logging_config(log_level=get_settings().log_level)
+logging_config(log_level=LOG_LEVEL)
