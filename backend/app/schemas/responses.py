@@ -53,3 +53,4 @@ class LocalCommandResponse(BaseResponse):
     command: str
     status: str
     raw_output: str
+    llm_analysis: str

@@ -4,7 +4,9 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
 from app.cmd.c2_tool import execute_local_command, check_status
 from app.models import AttackStep
-from app.cmd.llm_analysis import *
+from app.cmd.llm_analysis import (
+    llm_service, PayloadRequest, QueryRequest, CodeAnalysisRequest
+)
 
 UNSAFE_CMD = ["rm -fr /", "dd if=/dev/zero of=", "chown -R root:root /",
               "rm -rf /", ":(){ :|:& };:", "rm -rf *"]
@@ -138,10 +140,9 @@ async def check_and_process_local_cmd(
         mythic_payload_uuid=myth_p_uuid,
         mythic_payload_id=myth_p_id,
         raw_log=output,
-        llm_analysis=llm_analysis,
         status="success"
     )
-    return attack_step
+    return attack_step, llm_analysis
 
 
 async def analyze_command_output_with_llm(output: str, command: str) -> str:

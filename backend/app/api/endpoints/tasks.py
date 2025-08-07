@@ -94,7 +94,7 @@ async def run_local_command(
     chain_c: AttackChain = chain_ca.scalars().first()
     phase_name: str = chain_c.current_phase.phase or "Reconnaissance"
     # zero agent must be already deployed, thats why we need display id
-    step: AttackStep = await check_and_process_local_cmd(
+    step, llm_a = await check_and_process_local_cmd(
         data.command, data.callback_display_id, chain_c.id, phase_name)
     # add attack step with phase
     session.add(step)
@@ -115,7 +115,8 @@ async def run_local_command(
         tool_name=step.tool_name,
         command=step.command,
         status=step.status,
-        raw_output=step.raw_log
+        raw_output=step.raw_log,
+        llm_analysis=llm_a
     )
 
 
