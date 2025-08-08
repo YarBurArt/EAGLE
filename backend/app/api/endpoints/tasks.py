@@ -2,9 +2,8 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
-from typing import List, Dict, Any
+from typing import List
 
-import g4f  # temp
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
 )
@@ -22,7 +21,7 @@ from app.models import (
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest,
     ActionApprovalRequest, ActionExecutionRequest,
-    PayloadRequest, QueryRequest, CodeAnalysisRequest
+    PayloadRequest
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
@@ -251,47 +250,13 @@ async def set_phase(
     )
 
 
-@router.post("/api/llm/query")
-async def llm_query(request: QueryRequest):
-    """
-    Основной эндпоинт для запросов к LLM
-    """
-    try:
-        result = await llm_service.query_llm(request.prompt, request.provider)
-        return {
-            "success": True,
-            "response": result,
-            "prompt": request.prompt
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/api/llm/analyze/code")
-async def analyze_code(request: CodeAnalysisRequest):
-    """
-    Анализирует код с помощью LLM
-    """
-    try:
-        prompt = f"analyze this code and explain it to me\n\n{request.code}"
-        result = await llm_service.query_llm(prompt)
-        return {
-            "success": True,
-            "analysis": result,
-            "code": request.code
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"error code analysis {str(e)}"
-        ) from e
-
-
 @router.post("/api/llm/generate/payload")
 async def generate_payload(request: PayloadRequest):
     """
     Генерирует пейлоады для penetration testing
     """
     try:
+        # todo move prompts templates to config or like llm_templ.py
         prompt = f"Create {request.language} script for learning purposes:\n{request.description}"
         result = await llm_service.query_llm(prompt)
         commands_prompt = f"""
@@ -441,68 +406,6 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
             status_code=500,
             detail=f"Failed to execute approved action: {str(e)}"
         ) from e
-
-
-@router.get("/api/llm/providers")
-async def get_providers():
-    """
-    Возвращает список доступных провайдеров
-    """
-    try:
-        providers_list = []
-        for name, provider in llm_service.providers.items():
-            providers_list.append({
-                "name": name,
-                "class": provider.__name__
-            })
-        return {
-            "success": True,
-            "providers": providers_list
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"error retrieving provider: {str(e)}"
-        ) from e
-
-
-@router.post("/api/llm/chat")
-async def chat_conversation(messages: Dict[str, Any]):
-    """
-    Эндпоинт для ведения диалога
-    """
-    try:
-        chat_messages = messages.get("messages", [])
-        if not chat_messages:
-            raise HTTPException(
-                status_code=400, detail="message massive needed"
-            )
-
-        for name, provider in llm_service.providers.items():
-            try:
-                response = await g4f.ChatCompletion.create_async(
-                    model=g4f.models.default,
-                    messages=chat_messages,
-                    provider=provider
-                )
-                if response and len(response) > 0:
-                    return {
-                        "success": True,
-                        "response": response,
-                        "provider": name
-                    }
-            except Exception as e:
-                print(f"Provider {name} failed: {e}")
-                continue
-
-        raise HTTPException(
-            status_code=500, detail="no response from providers"
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"dialog error: {str(e)}"
-        ) from e  # to track traceback
 
 
 # @router.add_middleware("http") FIXME: middleware to main
