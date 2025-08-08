@@ -309,7 +309,7 @@ async def approve_action(action_request: ActionApprovalRequest):
     Endpoint for approved actions and execution with saving to AttackStep
     """
     try:
-        # Execute the approved action
+        # Execute the approved action # FIXME: via proc and not only local
         output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
             action_request.command,
             action_request.agent_id
@@ -321,7 +321,7 @@ async def approve_action(action_request: ActionApprovalRequest):
             output
         )
 
-        # Create AttackStep record
+        # Create AttackStep record  # FIXME: save do db
         attack_step = AttackStep(
             chain_id=action_request.chain_id,
             phase=action_request.phase,
@@ -341,18 +341,7 @@ async def approve_action(action_request: ActionApprovalRequest):
         }
 
     except Exception as e:
-        # Save error to AttackStep
-        attack_step = AttackStep(
-            chain_id=action_request.chain_id,
-            phase=action_request.phase,
-            tool_name=action_request.command.split()[0],
-            command=action_request.command,
-            mythic_task_id="",
-            mythic_payload_uuid="",
-            mythic_payload_id="",
-            raw_log=str(e),
-            status="error"
-        )
+        # no need to save to AttackStep, only crit errors for 500
         raise HTTPException(
             status_code=500,
             detail=f"Error executing approved action: {str(e)}"

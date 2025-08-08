@@ -5,7 +5,8 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 from typing import Tuple
 
 from app.cmd.c2_tool import (
-    execute_local_command, check_status, AgentCommandOutput
+    execute_local_command, check_status, AgentCommandOutput,
+    get_cmd_list_for_payload
 )
 from app.models import AttackStep
 from app.cmd.llm_analysis import llm_service
@@ -19,6 +20,13 @@ async def init_zero_agent():
         download by mythic_payload_uuid ->
         run via subprocess.run, save mythic agent info to db
         save Resource Development info to AttackStep"""
+    pass
+
+
+async def process_approved_cmd(cmd, tool_name):
+    """ based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
+        no db changes to AttackStep by default """
+    # TODO: by tool_name route cmd as custom_ action or agent_ action or local_
     pass
 
 
@@ -36,7 +44,7 @@ async def check_and_process_local_cmd(
     assert cmd not in UNSAFE_CMD
     # phase even for local command depends on current or recon
     assert is_command_allowed_in_phase(
-        cmd, phase_name
+        cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
     ), f"Command not allowed in phase {phase_name}"
     # send command to C2
     ex_result: AgentCommandOutput = await execute_local_command(
@@ -50,7 +58,7 @@ async def check_and_process_local_cmd(
     attack_step = AttackStep(
         chain_id=chain_id,
         phase=phase_name,
-        tool_name=cmd.split()[0],
+        tool_name="local_"+cmd.split()[0],
         command=cmd,
         mythic_task_id=ex_result.mythic_task_id,
         mythic_payload_uuid=ex_result.mythic_payload_uuid,
@@ -81,11 +89,13 @@ async def analyze_command_output_with_llm(output: str, command: str) -> str:
         return f"error while analysis LLM: {str(e)}"
 
 
-def is_command_allowed_in_phase(cmd: str, phase_name: str) -> bool:
+def is_command_allowed_in_phase(
+    cmd: str, phase_name: str, payload_type: str, os_type: str
+) -> bool:
     """ check command for allowed, we dont want to ransomware """
     allowed_commands = get_commands_for_phase(phase_name)
+    allowed_commands += get_cmd_list_for_payload(payload_type, os_type)
     # Можно сделать частичное совпадение или регулярки
-    # TODO: check also for agent commands list
     return any(
         cmd.strip().startswith(
             allowed.split()[0]
@@ -94,15 +104,16 @@ def is_command_allowed_in_phase(cmd: str, phase_name: str) -> bool:
 
 
 def get_commands_for_phase(phase_name: str):
-    """ get specific command for phase, format """
-    # TODO: add commands get from agent
+    """ get specific commands for phase, format """
     return PHASE_COMMANDS.get(phase_name, [])
 
 
-async def suggest_actions_for_phase(phase_name: str) -> list[str]:
+async def suggest_actions_for_phase(
+    phase_name: str, payload_type: str, os_type: str
+) -> list[str]:
     """Return list of suggested commands for given phase"""
-    # TODO: add llm suggestions
-    return get_commands_for_phase(phase_name)
+    by_agent = get_cmd_list_for_payload(payload_type, os_type)
+    return get_commands_for_phase(phase_name) + by_agent
 
 
 async def generate_action_suggestions_with_llm(
