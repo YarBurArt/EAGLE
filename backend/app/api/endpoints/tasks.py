@@ -309,7 +309,8 @@ async def approve_action(action_request: ActionApprovalRequest):
     Endpoint for approved actions and execution with saving to AttackStep
     """
     try:
-        # Execute the approved action # FIXME: via proc and not only local
+        # Execute the approved action 
+        # FIXME: via process_approved_cmd() from proc and not only local
         output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
             action_request.command,
             action_request.agent_id
@@ -321,7 +322,7 @@ async def approve_action(action_request: ActionApprovalRequest):
             output
         )
 
-        # Create AttackStep record  # FIXME: save do db
+        # Create AttackStep record  # FIXME: save object to db
         attack_step = AttackStep(
             chain_id=action_request.chain_id,
             phase=action_request.phase,
