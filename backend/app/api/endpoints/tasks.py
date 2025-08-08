@@ -8,50 +8,34 @@ import g4f  # temp
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
 )
-from datetime import datetime
-from typing import Optional
-from app.cmd.c2_tool import execute_local_command
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.cmd.llm_analysis import (
-    llm_service, PayloadRequest, QueryRequest, CodeAnalysisRequest
-)
+
+from app.cmd.c2_tool import execute_local_command
+from app.cmd.llm_analysis import llm_service
 from app.api import deps
 from app.core.config import phases
 from app.models import (
     User, AttackChain, AttackStep, CurrentAttackPhase
 )
 from app.schemas.requests import (
-    NewChainRequest, LocalCommandRequest
+    NewChainRequest, LocalCommandRequest,
+    ActionApprovalRequest, ActionExecutionRequest,
+    PayloadRequest, QueryRequest, CodeAnalysisRequest
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
     NewPhaseResponse
 )
-from app.cmd.proc import check_and_process_local_cmd, get_agent_status, analyze_command_output_with_llm
-from pydantic import BaseModel
+from app.cmd.proc import (
+    check_and_process_local_cmd, get_agent_status,
+    analyze_command_output_with_llm
+)
 
 
 router = APIRouter()
 
-class ActionApprovalRequest(BaseModel):
-    """Модель запроса для одобрения действий"""
-    command: str
-    agent_id: int
-    chain_id: int
-    phase: str
-    approved_by: str
-    reason: Optional[str] = ""
-
-class ActionExecutionRequest(BaseModel):
-    """Модель запроса для выполнения одобренных действий"""
-    command: str
-    agent_display_id: int
-    chain_id: int
-    phase: str
-    approved_by: str
-    context: Optional[str] = ""
 
 @router.post(
     "/new-chain",
@@ -297,7 +281,10 @@ async def analyze_code(request: CodeAnalysisRequest):
             "code": request.code
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"error code analysis {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"error code analysis {str(e)}"
+        ) from e
+
 
 @router.post("/api/llm/generate/payload")
 async def generate_payload(request: PayloadRequest):
@@ -456,9 +443,6 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
         ) from e
 
 
-
-
-
 @router.get("/api/llm/providers")
 async def get_providers():
     """
@@ -490,7 +474,9 @@ async def chat_conversation(messages: Dict[str, Any]):
     try:
         chat_messages = messages.get("messages", [])
         if not chat_messages:
-            raise HTTPException(status_code=400, detail="message massive needed")
+            raise HTTPException(
+                status_code=400, detail="message massive needed"
+            )
 
         for name, provider in llm_service.providers.items():
             try:
@@ -509,7 +495,9 @@ async def chat_conversation(messages: Dict[str, Any]):
                 print(f"Provider {name} failed: {e}")
                 continue
 
-        raise HTTPException(status_code=500, detail="no response from providers")
+        raise HTTPException(
+            status_code=500, detail="no response from providers"
+        )
 
     except Exception as e:
         raise HTTPException(

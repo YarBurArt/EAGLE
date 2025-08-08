@@ -1,27 +1,8 @@
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
 import g4f
-import asyncio
-import json
-
+from fastapi import HTTPException
+# TODO: ollama, openrouter , yandexgpt support
 # Настройка g4f
 g4f.debug.logging = True
-
-
-class QueryRequest(BaseModel):
-    prompt: str
-    provider: Optional[str] = None
-
-
-class CodeAnalysisRequest(BaseModel):
-    code: str
-
-
-class PayloadRequest(BaseModel):
-    description: str
-    language: Optional[str] = "python"
 
 
 class LLMService:
@@ -49,7 +30,10 @@ class LLMService:
                     )
                     return response
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=f"Provider {provider_name} failed: {str(e)}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Provider {provider_name} failed: {str(e)}"
+                    ) from e
 
             # Если провайдер не указан или не найден, пробуем разные
             for name, provider in self.providers.items():
@@ -68,7 +52,9 @@ class LLMService:
             return "Не удалось получить ответ от ни одного провайдера"
 
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Ошибка при запросе к LLM: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Ошибка при запросе к LLM: {str(e)}"
+            ) from e
 
 
 # Инициализация сервиса

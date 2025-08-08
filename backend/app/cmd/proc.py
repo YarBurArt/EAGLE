@@ -2,11 +2,13 @@
 module for processing commands in the context of a chain,
 based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
-from app.cmd.c2_tool import execute_local_command, check_status
-from app.models import AttackStep
-from app.cmd.llm_analysis import (
-    llm_service, PayloadRequest, QueryRequest, CodeAnalysisRequest
+from typing import Tuple
+
+from app.cmd.c2_tool import (
+    execute_local_command, check_status, AgentCommandOutput
 )
+from app.models import AttackStep
+from app.cmd.llm_analysis import llm_service
 from app.core.config import (
     phases, phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
 )
@@ -28,7 +30,7 @@ async def get_agent_status(callback_display_id):
 
 async def check_and_process_local_cmd(
         cmd: str, c_display_id: int, chain_id: int, phase_name: str
-) -> AttackStep:
+) -> Tuple[AttackStep, str]:
     """ async function for check is safe command ->
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
@@ -37,22 +39,23 @@ async def check_and_process_local_cmd(
         cmd, phase_name
     ), f"Command not allowed in phase {phase_name}"
     # send command to C2
-    output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
+    ex_result: AgentCommandOutput = await execute_local_command(
         cmd, c_display_id
     )
-
     # Отправляем вывод команды в LLM для анализа
-    llm_analysis = await analyze_command_output_with_llm(output, cmd)
+    llm_analysis = await analyze_command_output_with_llm(
+        ex_result.output, cmd
+    )
 
     attack_step = AttackStep(
         chain_id=chain_id,
         phase=phase_name,
         tool_name=cmd.split()[0],
         command=cmd,
-        mythic_task_id=myth_t_id,
-        mythic_payload_uuid=myth_p_uuid,
-        mythic_payload_id=myth_p_id,
-        raw_log=output,
+        mythic_task_id=ex_result.mythic_task_id,
+        mythic_payload_uuid=ex_result.mythic_payload_uuid,
+        mythic_payload_id=ex_result.mythic_payload_id,
+        raw_log=ex_result.output,
         status="success"
     )
     return attack_step, llm_analysis
@@ -104,7 +107,7 @@ async def suggest_actions_for_phase(phase_name: str) -> list[str]:
 
 async def generate_action_suggestions_with_llm(
     phase_name: str, context_summary: str = ""
-):
+) -> dict:
     """Use LLM to refine suggestions based on summary or logs"""
     try:
         # TODO: system prompt, generate also command agent for Agent

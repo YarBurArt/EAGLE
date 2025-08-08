@@ -20,7 +20,8 @@ import logging.config
 from functools import lru_cache
 from pathlib import Path
 from pydantic import (
-    AnyHttpUrl, BaseModel, Field, SecretStr, computed_field,  # BaseSettings
+    AnyHttpUrl, BaseModel, Field, HttpUrl,
+    SecretStr, computed_field,  # BaseSettings
     )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine.url import URL
@@ -59,7 +60,7 @@ class Mythic(BaseModel):
 
 class LLMservice(BaseModel):
     """ env format like LLMSERVICE__API_URL=http... """
-    API_URL: str = "http://localhost:69228"  # Для локального Ollama
+    API_URL: HttpUrl = "http://localhost:69228"  # Для локального Ollama
     API_KEY: str = None
     TIMEOUT: int = 120
     DEFAULT_MODEL: str = "mistral"
