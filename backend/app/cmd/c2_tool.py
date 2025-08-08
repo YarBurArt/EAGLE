@@ -96,7 +96,10 @@ async def create_payload_d(
     #                    'MYTHIC__SERVER_PORT')}/direct/download/{p_uuid}"
     status = payload_response["build_phase"]
     raw_log = payload_response["build_message"]
-    return NewPayloadOutput(p_uuid, p_id, status, raw_log)
+    return NewPayloadOutput(
+        payload_uuid=p_uuid, payload_id=p_id,
+        status=status, raw_log=raw_log
+    )
 
 
 async def get_cmd_list_for_payload(
@@ -223,7 +226,9 @@ async def execute_local_command(
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
 
     return AgentCommandOutput(
-        str(output), mythic_t_id, mythic_p_id, mythic_p_uuid
+        output=str(output),  # from mythic is bytestring
+        mythic_task_id=mythic_t_id, mythic_payload_id=mythic_p_id,
+        mythic_payload_uuid=mythic_p_uuid
     )
 
 
@@ -237,7 +242,8 @@ async def execute_agent_command_o(
     )
     mythic_p_id, mythic_p_uuid = await get_payload_ids(callback_display_id)
     return AgentCommandOutput(
-        str(output), 1, mythic_p_id, mythic_p_uuid
+        output=str(output), mythic_task_id=1,
+        mythic_payload_id=mythic_p_id, mythic_payload_uuid=mythic_p_uuid
     )
 
 

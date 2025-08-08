@@ -27,6 +27,7 @@ class JWTToken(BaseModel):
 
 
 def create_jwt_token(user_id: str) -> JWTToken:
+    """ create jwt based on time, expire sec, user_id """
     iat = int(time.time())
     exp = iat + get_settings().security.jwt_access_token_expire_secs
 
@@ -47,6 +48,7 @@ def create_jwt_token(user_id: str) -> JWTToken:
 
 
 def verify_jwt_token(token: str) -> JWTTokenPayload:
+    """ verify jwt token for valid by jwt secret key """
     # Pay attention to verify_signature passed explicite,
     # even if it is the default.
     # Verification is based on expected payload fields like "exp", "iat" etc.
