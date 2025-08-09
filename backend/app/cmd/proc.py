@@ -2,20 +2,23 @@
 module for processing commands in the context of a chain,
 based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
-from typing import Tuple
+import time
+import hashlib
+from typing import Tuple, Any
 
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
-    get_cmd_list_for_payload
+    get_cmd_list_for_payload, execute_agent_command_o, create_payload_d
 )
+import app.cmd.c2_tool as c2_tool_c_cmd
 from app.models import AttackStep
 from app.cmd.llm_analysis import llm_service
 from app.core.config import (
-    phases, phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
+    phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
 )
 
 
-async def init_zero_agent():
+async def init_agent():
     """ generate payload ->
         download by mythic_payload_uuid ->
         run via subprocess.run, save mythic agent info to db
@@ -23,11 +26,66 @@ async def init_zero_agent():
     pass
 
 
-async def process_approved_cmd(cmd, tool_name):
+async def process_approved_cmd(
+    cmd: str, chain_id: int, tool_name: str, display_id: int,
+    phase_name: str, p_lport: int, p_os_type: str,
+) -> Tuple[AttackStep, str]:
     """ based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
-        no db changes to AttackStep by default """
-    # TODO: by tool_name route cmd as custom_ action or agent_ action or local_
-    pass
+        no db changes to AttackStep by default cuz it depends on tasks """
+    type_n, tool_n = tool_name.split("_", 1)
+    assert type_n in ['local', 'agent', 'custom', 'payload']
+
+    if type_n == "local":
+        result, llm_a = await check_and_process_local_cmd(
+            cmd=cmd,  # params for shell agent command
+            c_display_id=display_id,
+            chain_id=chain_id, phase_name=phase_name
+        )
+        return result, llm_a
+    if type_n == "payload":
+        file_name = tool_n + hashlib.md5(str(time.time()).encode('utf-8'))
+        result = await create_payload_d(
+            payload_type=tool_n, file_name=file_name,
+            lport=p_lport, os_type=p_os_type  # host from default
+        )
+        llm_analysis = await analyze_command_output_with_llm(
+            result.raw_log, cmd
+        )
+        return AttackStep(
+            chain_id=chain_id, tool_name=tool_name,
+            mythic_task_id=0, command=cmd,
+            mythic_payload_id=result.payload_id,
+            mythic_payload_uuid=result.payload_uuid,
+            status=result.status, raw_log=result.raw_log
+        ), llm_analysis
+    if type_n == "agent":
+        result = await execute_agent_command_o(
+            cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
+            callback_display_id=display_id
+        )  # by llm cmd based on get_cmd_list...
+        llm_analysis = await analyze_command_output_with_llm(
+            result.output, cmd
+        )
+        return AttackStep(
+            chain_id=chain_id, status="success",
+            tool_name=tool_name, command=cmd,
+            mythic_task_id=result.mythic_task_id,
+            mythic_payload_id=result.mythic_payload_id,
+            mythic_payload_uuid=result.mythic_payload_uuid,
+            raw_log=result.output,
+        ), llm_analysis
+    if type_n == "custom":
+        if not hasattr(c2_tool_c_cmd, tool_n):
+            return  # maybe some exception
+        def_func = getattr(c2_tool_c_cmd, tool_n)
+        args_e = cmd.split(":")  # enforce LLM to return params as b:c
+        result = await def_func(display_id, *args_e)
+        # check object from tuple for class, ret like 'status raw_log'
+        strings_out = ' '.join(i for i in result if isinstance(i, str))
+        llm_analysis = await analyze_command_output_with_llm(
+            strings_out, cmd
+        )
+        return result, llm_analysis
 
 
 async def get_agent_status(callback_display_id):

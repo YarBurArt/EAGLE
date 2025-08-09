@@ -119,7 +119,7 @@ async def get_cmd_list_for_payload(
     return cmd_list  # os already know
 
 
-async def c2_pivoting_agent(lport, display_id, agent_type) -> str:
+async def c2_pivoting_agent(display_id, lport, agent_type) -> str:
     """ forward agent via itself, return status """
     # check support resp = await mythic.get_all_commands_for_payloadtype(
     # mythic=mythic_instance, payload_type_name="poseidon")
