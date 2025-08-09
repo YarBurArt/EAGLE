@@ -2,11 +2,14 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
+import json
 from typing import List
 
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
 )
+from fastapi.responses import StreamingResponse
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +32,7 @@ from app.schemas.responses import (
 )
 from app.cmd.proc import (
     check_and_process_local_cmd, get_agent_status,
-    analyze_command_output_with_llm
+    analyze_command_output_with_llm, process_approved_cmd
 )
 
 
@@ -247,6 +250,53 @@ async def set_phase(
     return NewPhaseResponse(
         chain_id=c_phase.chain_id,
         current_phase_name=c_phase.phase
+    )
+
+
+async def perform_chain_step(steps: List[AttackStep], zero_display_id):
+    """ generator to yield result of each step """
+    for step in steps:
+        result, llm_a = await process_approved_cmd(
+            cmd=step.command, chain_id=step.chain_id, 
+            tool_name=step.tool_name, phase_name=step.phase,
+            display_id=zero_display_id,
+            # display_id=step.agent[N].os_type or "Windows" # FIXME: agent
+            # p_os_type=step.agent[N].os_type or "Windows"
+        )
+        out_d = {
+            "AttackStep": result.model_dump(),
+            "LLM_analysis": llm_a
+        }
+        yield json.dumps(out_d) + "\n"
+
+
+@router.post(
+    "/run-chain/{chain_id}",
+    description="Run attack chain from db by id",
+)
+async def run_chain(
+    chain_id: int,
+    zero_display_id: int,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> StreamingResponse:
+    """ executes commands via proc in order of time """
+    chain_ca_list: List[AttackChain] = await session.execute(
+        select(AttackChain).where(
+            AttackChain.id == chain_id,
+        )
+    )
+    chain_ca: AttackChain = chain_ca_list.scalars().first()
+    # FIXME: that's slower that via SQLalchemy
+    # generate list of successed steps and filter by last update_time
+    f_sorted_steps = sorted(
+        (i for i in chain_ca.attack_step if i.status == "success"),
+        key=lambda step: step.update_time
+    )
+    # maybe better with WS
+    return StreamingResponse(
+        perform_chain_step(f_sorted_steps, zero_display_id),
+        media_type="application/json"
     )
 
 

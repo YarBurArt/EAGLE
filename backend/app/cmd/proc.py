@@ -28,7 +28,7 @@ async def init_agent():
 
 async def process_approved_cmd(
     cmd: str, chain_id: int, tool_name: str, display_id: int,
-    phase_name: str, p_lport: int, p_os_type: str,
+    phase_name: str, p_lport: int = 4329, p_os_type: str = "Windows",
 ) -> Tuple[AttackStep, str]:
     """ based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
         no db changes to AttackStep by default cuz it depends on tasks """
@@ -44,6 +44,7 @@ async def process_approved_cmd(
         return result, llm_a
     if type_n == "payload":
         file_name = tool_n + hashlib.md5(str(time.time()).encode('utf-8'))
+        # TODO: set port/os by C2
         result = await create_payload_d(
             payload_type=tool_n, file_name=file_name,
             lport=p_lport, os_type=p_os_type  # host from default
