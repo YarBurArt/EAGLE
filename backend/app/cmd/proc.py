@@ -4,7 +4,7 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
 import time
 import hashlib
-from typing import Tuple, Any
+from typing import Tuple
 
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
@@ -32,6 +32,7 @@ async def process_approved_cmd(
 ) -> Tuple[AttackStep, str]:
     """ based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
         no db changes to AttackStep by default cuz it depends on tasks """
+    # tool_name like agent_libinject or local_impacket-wmiexec
     type_n, tool_n = tool_name.split("_", 1)
     assert type_n in ['local', 'agent', 'custom', 'payload']
 
@@ -43,39 +44,18 @@ async def process_approved_cmd(
         )
         return result, llm_a
     if type_n == "payload":
-        file_name = tool_n + hashlib.md5(str(time.time()).encode('utf-8'))
-        # TODO: set port/os by C2
-        result = await create_payload_d(
-            payload_type=tool_n, file_name=file_name,
-            lport=p_lport, os_type=p_os_type  # host from default
-        )
-        llm_analysis = await analyze_command_output_with_llm(
-            result.raw_log, cmd
-        )
-        return AttackStep(
-            chain_id=chain_id, tool_name=tool_name,
-            mythic_task_id=0, command=cmd,
-            mythic_payload_id=result.payload_id,
-            mythic_payload_uuid=result.payload_uuid,
-            status=result.status, raw_log=result.raw_log
-        ), llm_analysis
+        result, llm_a = await check_and_create_mpayload(
+            chain_id, tool_name, tool_n, p_os_type, p_lport
+        )  # next process by payload uuid
+        return result, llm_a
     if type_n == "agent":
-        result = await execute_agent_command_o(
-            cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
-            callback_display_id=display_id
-        )  # by llm cmd based on get_cmd_list...
-        llm_analysis = await analyze_command_output_with_llm(
-            result.output, cmd
+        result, llm_a = await check_and_process_agent_cmd(
+            display_id, chain_id, cmd,  # cmd is just parameters
+            tool_name, tool_n  # actual command like libinject
         )
-        return AttackStep(
-            chain_id=chain_id, status="success",
-            tool_name=tool_name, command=cmd,
-            mythic_task_id=result.mythic_task_id,
-            mythic_payload_id=result.mythic_payload_id,
-            mythic_payload_uuid=result.mythic_payload_uuid,
-            raw_log=result.output,
-        ), llm_analysis
+        return result, llm_a
     if type_n == "custom":
+        # any other scenarios based on custom C2 functions in c2_tool
         if not hasattr(c2_tool_c_cmd, tool_n):
             return  # maybe some exception
         def_func = getattr(c2_tool_c_cmd, tool_n)
@@ -87,6 +67,53 @@ async def process_approved_cmd(
             strings_out, cmd
         )
         return result, llm_analysis
+
+
+async def check_and_process_agent_cmd(
+    display_id: int, chain_id: int, cmd: str, tool_name: str, tool_n: str
+) -> Tuple[AttackStep, str]:
+    """ run commands on agent and return output based on tool """
+    assert cmd not in UNSAFE_CMD
+    result = await execute_agent_command_o(
+        cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
+        callback_display_id=display_id
+    )  # by llm cmd based on get_cmd_list...
+    llm_analysis = await analyze_command_output_with_llm(
+        result.output, cmd
+    )
+    return AttackStep(
+        chain_id=chain_id, status="success",
+        tool_name=tool_name, command=cmd,
+        mythic_task_id=result.mythic_task_id,
+        mythic_payload_id=result.mythic_payload_id,
+        mythic_payload_uuid=result.mythic_payload_uuid,
+        raw_log=result.output,
+    ), llm_analysis
+
+
+async def check_and_create_mpayload(
+    chain_id: int, tool_name: str, tool_n: str, p_os_type: str, p_lport: str
+) -> Tuple[AttackStep, str]:
+    """ check payload parameters and create payload, save in mythic,
+        return uuid/id to get information or send to rhost """
+    assert p_os_type in ['Windows', 'macOS', 'Linux']  # from mythic api
+    # TODO: set port/os by C2, get information about agents profile
+    file_name = tool_n + hashlib.md5(str(time.time()).encode('utf-8'))
+    cmd = create_payload_d.__name__  # temp
+    result = await create_payload_d(
+        payload_type=tool_n, file_name=file_name,
+        lport=p_lport, os_type=p_os_type  # host from default
+    )
+    llm_analysis = await analyze_command_output_with_llm(
+        result.raw_log, cmd
+    )
+    return AttackStep(
+        chain_id=chain_id, tool_name=tool_name,
+        mythic_task_id=0, command=cmd,
+        mythic_payload_id=result.payload_id,
+        mythic_payload_uuid=result.payload_uuid,
+        status=result.status, raw_log=result.raw_log
+    ), llm_analysis
 
 
 async def get_agent_status(callback_display_id):
