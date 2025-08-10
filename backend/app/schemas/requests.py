@@ -31,7 +31,6 @@ class NewChainRequest(BaseRequest):
 
 class LocalCommandRequest(BaseRequest):
     chain_name: str
-    phase: str
     callback_display_id: int
     command: str
 

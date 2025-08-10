@@ -100,7 +100,12 @@ async def run_local_command(
     )
     # get first object of select
     chain_c: AttackChain = chain_ca.scalars().first()
-    phase_name: str = chain_c.current_phase.phase or "Reconnaissance"
+    c_phase = await session.execute(
+        select(CurrentAttackPhase).where(
+            CurrentAttackPhase.chain_id == chain_c.id
+        )
+    )
+    phase_name: str = c_phase.scalars().first() or "Reconnaissance"
     # zero agent must be already deployed, thats why we need display id
     step, llm_a = await check_and_process_local_cmd(
         data.command, data.callback_display_id, chain_c.id, phase_name)
@@ -114,7 +119,7 @@ async def run_local_command(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
         ) from exc
-
+    # FIXME: for long time response
     return LocalCommandResponse(
         user_id=current_user.user_id,
         chain_name=chain_c.chain_name,
@@ -157,7 +162,9 @@ async def read_chain_info(
     )
     chain_ca: AttackChain = chain_ca_list.scalars().first()
     await session.commit()
-    chain_username = current_user.username or f"user#{chain_id}"
+    chain_username = (
+        current_user.username or current_user.email.split("@", 1)[0]
+    )
     chain_c_phase_list: List[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_ca.id
@@ -257,7 +264,7 @@ async def perform_chain_step(steps: List[AttackStep], zero_display_id):
     """ generator to yield result of each step """
     for step in steps:
         result, llm_a = await process_approved_cmd(
-            cmd=step.command, chain_id=step.chain_id, 
+            cmd=step.command, chain_id=step.chain_id,
             tool_name=step.tool_name, phase_name=step.phase,
             display_id=zero_display_id,
             # display_id=step.agent[N].os_type or "Windows" # FIXME: agent
@@ -281,16 +288,16 @@ async def run_chain(
     current_user: User = Depends(deps.get_current_user),
 ) -> StreamingResponse:
     """ executes commands via proc in order of time """
-    chain_ca_list: List[AttackChain] = await session.execute(
-        select(AttackChain).where(
-            AttackChain.id == chain_id,
+    chain_steps_list = await session.execute(
+        select(AttackStep).where(
+            AttackStep.chain_id == chain_id,
         )
     )
-    chain_ca: AttackChain = chain_ca_list.scalars().first()
+    chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
     # FIXME: that's slower that via SQLalchemy
     # generate list of successed steps and filter by last update_time
     f_sorted_steps = sorted(
-        (i for i in chain_ca.attack_step if i.status == "success"),
+        (i for i in chain_steps_l_ca if i.status == "success"),
         key=lambda step: step.update_time
     )
     # maybe better with WS

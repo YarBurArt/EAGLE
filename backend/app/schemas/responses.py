@@ -1,7 +1,8 @@
 """
 Module to defining responses types and format
 """
-from pydantic import BaseModel, ConfigDict, EmailStr
+from typing import Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, UUID4
 
 
 class BaseResponse(BaseModel):
@@ -17,10 +18,10 @@ class AccessTokenResponse(BaseResponse):
 
 
 class UserResponse(BaseResponse):
-    user_id: str
+    user_id: UUID4
     email: EmailStr
-    role: str
-    username: str
+    role: Optional[str] = "user"
+    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
 
 
 class NewChainResponse(BaseResponse):
@@ -36,16 +37,16 @@ class NewPhaseResponse(BaseResponse):
 
 class GetChainPhaseResponse(BaseResponse):
     chain_id: int
-    user_id: str
+    user_id: UUID4
     chain_name: str
-    username: str
+    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
     user_email: str
     final_status: str
     current_phase_name: str
 
 
 class LocalCommandResponse(BaseResponse):
-    user_id: str
+    user_id: UUID4
     chain_name: str
     callback_display_id: int
     mythic_task_id: int

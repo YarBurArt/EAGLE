@@ -2,12 +2,17 @@
 Main module responsible for the upper-level API design,
 security middleware layers, and Swagger parameters
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
+from pydantic import ValidationError
+
 from app.api.api_router import api_router, auth_router
 from app.core.config import get_settings
+
+from app.cmd.c2_tool import init_mythic
 
 app = FastAPI(
     title="EAGLE",
@@ -38,3 +43,27 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=get_settings().security.allowed_hosts,
 )
+
+
+@app.on_event("startup")
+async def on_startup():
+    """ init steps for any chain """
+    await init_mythic()
+
+
+@app.exception_handler(AssertionError)
+async def assertion_exception_handler(request: Request, exc: AssertionError):
+    """ we dont need 500 at bad input """
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)}
+    )
+
+
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """ we dont need 500 at bad value inside """
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)}
+    )

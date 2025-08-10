@@ -129,9 +129,10 @@ async def check_and_process_local_cmd(
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
     # phase even for local command depends on current or recon
-    assert is_command_allowed_in_phase(
+    is_allowed_cmd = await is_command_allowed_in_phase(
         cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
-    ), f"Command not allowed in phase {phase_name}"
+    )
+    assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
     # send command to C2
     ex_result: AgentCommandOutput = await execute_local_command(
         cmd, c_display_id
@@ -175,12 +176,13 @@ async def analyze_command_output_with_llm(output: str, command: str) -> str:
         return f"error while analysis LLM: {str(e)}"
 
 
-def is_command_allowed_in_phase(
+async def is_command_allowed_in_phase(
     cmd: str, phase_name: str, payload_type: str, os_type: str
 ) -> bool:
     """ check command for allowed, we dont want to ransomware """
     allowed_commands = get_commands_for_phase(phase_name)
-    allowed_commands += get_cmd_list_for_payload(payload_type, os_type)
+    # FIXME: for payload type format
+    # allowed_commands += await get_cmd_list_for_payload(payload_type, os_type)
     # Можно сделать частичное совпадение или регулярки
     return any(
         cmd.strip().startswith(

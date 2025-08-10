@@ -3,6 +3,7 @@ Module that handles all responsibilities related
 to working with Mythic C2
 """
 import os
+import uuid
 import socket
 from typing import List, Tuple
 from pydantic import BaseModel, UUID4
@@ -180,8 +181,7 @@ async def check_status(callback_display_id: int) -> str:
 async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
     """ get payload id and uuid from display id """
     global mythic_instance
-    if mythic_instance is None:
-        mythic_instance = await init_mythic()
+
     # custom query that will be wrapped in custom_return_attributes for GraphQL
     custom_attributes = """
     host
@@ -197,11 +197,13 @@ async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
     callback = next(
         (i for i in result if i.get("id") == callback_display_id),
         None)
-    payload = callback.get("payload")
+    payload: dict = None
+    if callback:
+        payload = callback.get("payload")
     if payload:
         return payload.get("id"), payload.get("uuid")
-    # default null
-    return 1, "00000000-0000-0000-0000-000000000000"
+    # default null/fake
+    return 1, uuid.uuid4()
 
 
 async def execute_local_command(
@@ -211,8 +213,6 @@ async def execute_local_command(
         and timeout, inside, there is a subscription to graphql event
         at the end of the task"""
     global mythic_instance
-    if mythic_instance is None:
-        mythic_instance = await init_mythic()
 
     output = await mythic.issue_task_and_waitfor_task_output(
         mythic=mythic_instance,
