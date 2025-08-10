@@ -9,7 +9,7 @@ from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
 )
 from fastapi.responses import StreamingResponse
-
+from app.core.llm_templ import LLMTemplates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -313,24 +313,18 @@ async def generate_payload(request: PayloadRequest):
     Генерирует пейлоады для penetration testing
     """
     try:
-        # todo move prompts templates to config or like llm_templ.py
-        prompt = f"Create {request.language} script for learning purposes:\n{request.description}"
+        # Используем шаблон из конфигурации
+        prompt = LLMTemplates.PAYLOAD_GENERATION.format(
+            language=request.language,
+            description=request.description
+        )
         result = await llm_service.query_llm(prompt)
-        commands_prompt = f"""
-        Based on this {request.language} script, generate commands that an agent would need to execute:
 
-        Script:
-        {result}
-
-        Please provide:
-        1. Setup commands (installation, dependencies)
-        2. Execution commands
-        3. Verification commands
-        4. Cleanup commands
-
-        Format as JSON with fields: setup_commands, execution_commands, verification_commands, cleanup_commands
-        Each field should be an array of command strings.
-        """
+        # Используем шаблон для генерации команд
+        commands_prompt = LLMTemplates.COMMANDS_GENERATION.format(
+            language=request.language,
+            script=result
+        )
 
         commands_result = await llm_service.query_llm(commands_prompt)
 
@@ -361,40 +355,45 @@ async def generate_payload(request: PayloadRequest):
 
 
 @router.post("/api/llm/action/approve")
-async def approve_action(action_request: ActionApprovalRequest):
+async def approve_action(action_request: ActionApprovalRequest, session: AsyncSession = Depends(deps.get_session)):
     """
     Endpoint for approved actions and execution with saving to AttackStep
     """
     try:
-        # Execute the approved action 
-        # FIXME: via process_approved_cmd() from proc and not only local
-        output, myth_t_id, myth_p_id, myth_p_uuid = await execute_local_command(
-            action_request.command,
-            action_request.agent_id
-        )
-
-        # Send output to LLM for analysis
-        llm_analysis = await analyze_command_output_with_llm(
-            action_request.command,
-            output
-        )
-
-        # Create AttackStep record  # FIXME: save object to db
-        attack_step = AttackStep(
+        # Execute the approved action
+        result = await process_approved_cmd(
+            cmd=action_request.command,
             chain_id=action_request.chain_id,
-            phase=action_request.phase,
-            tool_name=action_request.command.split()[0],
-            command=action_request.command,
-            mythic_task_id=myth_t_id,
-            mythic_payload_uuid=myth_p_uuid,
-            mythic_payload_id=myth_p_id,
-            raw_log=output,
-            status="success"
+            tool_name=f"local_{action_request.command.split()[0]}",
+            display_id=action_request.agent_id,
+            phase_name=action_request.phase
         )
+
+        if hasattr(result, '__await__'):
+            attack_step, llm_analysis = await result
+        else:
+            attack_step, llm_analysis = result
+
+        # Update the existing attack_step with LLM analysis
+        attack_step.llm_analysis = llm_analysis
+        attack_step.status = "success"
+
+        # Add to session and commit
+        session.add(attack_step)
+        try:
+            await session.commit()
+            await session.refresh(attack_step)  # Обновляем объект после сохранения
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=400,
+                detail="Database integrity error"
+            ) from exc
 
         return {
             "success": True,
             "attack_step": attack_step,
+            "llm_analysis": llm_analysis,
             "message": "Action executed and saved successfully"
         }
 
