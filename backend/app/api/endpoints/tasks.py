@@ -28,7 +28,7 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse
+    NewPhaseResponse, AttackStepResponse
 )
 from app.cmd.proc import (
     check_and_process_local_cmd, get_agent_status,
@@ -105,7 +105,8 @@ async def run_local_command(
             CurrentAttackPhase.chain_id == chain_c.id
         )
     )
-    phase_name: str = c_phase.scalars().first() or "Reconnaissance"
+    phase_name_ob: CurrentAttackPhase = c_phase.scalars().first() 
+    phase_name: str = str(phase_name_ob.phase) or "Reconnaissance"
     # zero agent must be already deployed, thats why we need display id
     step, llm_a = await check_and_process_local_cmd(
         data.command, data.callback_display_id, chain_c.id, phase_name)
@@ -128,7 +129,8 @@ async def run_local_command(
         tool_name=step.tool_name,
         command=step.command,
         status=step.status,
-        raw_output=step.raw_log
+        raw_output=step.raw_log,
+        llm_analysis=llm_a
     )
 
 
@@ -269,12 +271,23 @@ async def perform_chain_step(steps: List[AttackStep], zero_display_id):
             display_id=zero_display_id,
             # display_id=step.agent[N].os_type or "Windows" # FIXME: agent
             # p_os_type=step.agent[N].os_type or "Windows"
-        )
+        )  # temp
+        resp_step = {
+            "step_id": result.id,
+            "chain_id": result.chain_id,
+            "phase": result.phase,
+            "tool_name": result.tool_name,
+            "mythic_payload_uuid": result.mythic_payload_uuid,
+            "status": result.status,
+            "raw_log": result.raw_log,
+            "command": result.command
+        }
         out_d = {
-            "AttackStep": result.model_dump(),
+            # result.model_dump() -> pydantic issue #6554
+            "AttackStep": resp_step,
             "LLM_analysis": llm_a
         }
-        yield json.dumps(out_d) + "\n"
+        yield json.dumps(out_d, default=str) + "\n"
 
 
 @router.post(

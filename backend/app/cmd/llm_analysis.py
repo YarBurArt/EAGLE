@@ -8,9 +8,9 @@ g4f.debug.logging = True
 class LLMService:
     def __init__(self):
         self.providers = {
+            "aichat": g4f.Provider.Chatai,
             "bing": g4f.Provider.bing,
             "you": g4f.Provider.You,
-            "aichat": g4f.Provider.Chatai,
         }
 
     async def query_llm(self, prompt: str, provider_name: str = None) -> str:

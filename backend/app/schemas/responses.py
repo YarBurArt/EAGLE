@@ -55,3 +55,14 @@ class LocalCommandResponse(BaseResponse):
     status: str
     raw_output: str
     llm_analysis: str
+
+
+class AttackStepResponse(BaseResponse):
+    step_id: int | None
+    chain_id: str | None
+    phase: str
+    tool_name: str
+    command: str
+    mythic_payload_uuid: str | UUID4
+    status: str
+    raw_log: str
