@@ -71,6 +71,6 @@ def verify_jwt_token(token: str) -> JWTTokenPayload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token invalid: {e}",
-        )
+        ) from e
 
     return JWTTokenPayload(**raw_payload)

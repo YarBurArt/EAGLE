@@ -1,3 +1,4 @@
+""" Module for unified interface to LLM services """
 import g4f
 from fastapi import HTTPException
 # TODO: ollama, openrouter , yandexgpt support

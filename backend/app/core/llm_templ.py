@@ -1,3 +1,6 @@
+""" Module for LLM system and user prompt f templates """
+
+
 class LLMTemplates:
     PAYLOAD_GENERATION = """Create {language} script for learning purposes:
 {description}

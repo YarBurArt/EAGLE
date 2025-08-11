@@ -161,8 +161,8 @@ async def run_agent_command(
         session, data.chain_name, current_user
     )
     step, llm_a = await check_and_process_agent_cmd(
-        data.callback_display_id, chain_id, data.command, phase_name,
-        tool_name='agent_' + data.tool, tool_n=data.tool)
+        data.callback_display_id, chain_id, data.command,
+        'agent_' + data.tool, data.tool, phase_name)
     # add attack step with phase
     session.add(step)
     try:

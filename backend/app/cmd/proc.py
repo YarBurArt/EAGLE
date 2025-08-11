@@ -3,6 +3,7 @@ module for processing commands in the context of a chain,
 based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
 import time
+import json
 import hashlib
 from typing import Tuple
 
@@ -51,7 +52,8 @@ async def process_approved_cmd(
     if type_n == "agent":
         result, llm_a = await check_and_process_agent_cmd(
             display_id, chain_id, cmd,  # cmd is just parameters
-            tool_name, tool_n  # actual command like libinject
+            tool_name, tool_n,  # actual command like libinject
+            phase_name
         )
         return result, llm_a
     if type_n == "custom":
@@ -70,7 +72,8 @@ async def process_approved_cmd(
 
 
 async def check_and_process_agent_cmd(
-    display_id: int, chain_id: int, cmd: str, tool_name: str, tool_n: str
+    display_id: int, chain_id: int, cmd: str, tool_name: str,
+    tool_n: str, phase: str
 ) -> Tuple[AttackStep, str]:
     """ run commands on agent and return output based on tool """
     assert cmd not in UNSAFE_CMD
@@ -82,6 +85,7 @@ async def check_and_process_agent_cmd(
         result.output, cmd
     )
     return AttackStep(
+        phase=phase,
         chain_id=chain_id, status="success",
         tool_name=tool_name, command=cmd,
         mythic_task_id=result.mythic_task_id,
@@ -109,6 +113,7 @@ async def check_and_create_mpayload(
     )
     return AttackStep(
         chain_id=chain_id, tool_name=tool_name,
+        phase="Resource Development",
         mythic_task_id=0, command=cmd,
         mythic_payload_id=result.payload_id,
         mythic_payload_uuid=result.payload_uuid,
@@ -219,7 +224,6 @@ async def generate_action_suggestions_with_llm(
         llm_response = await llm_service.query_llm(prompt)
 
         try:
-            import json
             suggestions = json.loads(llm_response)
             return suggestions
         except json.JSONDecodeError:
