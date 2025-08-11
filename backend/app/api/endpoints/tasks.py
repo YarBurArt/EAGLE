@@ -3,7 +3,7 @@ Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
 import json
-from typing import List
+from typing import List, Tuple
 
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
@@ -24,15 +24,16 @@ from app.models import (
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest,
     ActionApprovalRequest, ActionExecutionRequest,
-    PayloadRequest
+    PayloadRequest, AgentCommandRequest
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse
+    NewPhaseResponse  # , AttackStepResponse
 )
 from app.cmd.proc import (
     check_and_process_local_cmd, get_agent_status,
-    analyze_command_output_with_llm, process_approved_cmd
+    analyze_command_output_with_llm, process_approved_cmd,
+    check_and_process_agent_cmd
 )
 
 
@@ -79,23 +80,15 @@ async def create_new_chain(
     )
 
 
-@router.post(
-    "/run-command",
-    description="Run command on zero agent",
-    response_model=LocalCommandResponse
-)
-async def run_local_command(
-    data: LocalCommandRequest,
-    session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user),
-) -> LocalCommandResponse:
-    """ post endpoint that get chain -> run command ->
-        save as AttackStep with chain id, combine and return with log """
+async def get_chain_n_phase(
+    session: AsyncSession, chain_name: str, current_user: User
+) -> Tuple[str, int, str]:
+    """ get chain name and current phase name from db by id """
     # get chain by user_id from get_current_user and chain_name
     chain_ca: List[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.user_id == current_user.user_id,
-            AttackChain.chain_name == data.chain_name
+            AttackChain.chain_name == chain_name
         )
     )
     # get first object of select
@@ -105,10 +98,29 @@ async def run_local_command(
             CurrentAttackPhase.chain_id == chain_c.id
         )
     )
-    phase_name: str = c_phase.scalars().first() or "Reconnaissance"
+    phase_name_ob: CurrentAttackPhase = c_phase.scalars().first()
+    phase_name: str = str(phase_name_ob.phase) or "Reconnaissance"
+    return chain_c.chain_name, chain_c.id, phase_name
+
+
+@router.post(
+    "/run-command",
+    description="Run shell command on zero agent",
+    response_model=LocalCommandResponse
+)
+async def run_local_command(
+    data: LocalCommandRequest,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> LocalCommandResponse:
+    """ post endpoint that get chain -> run command ->
+        save as AttackStep with chain id, combine and return with log """
+    chain_name, chain_id, phase_name = await get_chain_n_phase(
+        session, data.chain_name, current_user
+    )
     # zero agent must be already deployed, thats why we need display id
     step, llm_a = await check_and_process_local_cmd(
-        data.command, data.callback_display_id, chain_c.id, phase_name)
+        data.command, data.callback_display_id, chain_id, phase_name)
     # add attack step with phase
     session.add(step)
     try:
@@ -122,13 +134,55 @@ async def run_local_command(
     # FIXME: for long time response
     return LocalCommandResponse(
         user_id=current_user.user_id,
-        chain_name=chain_c.chain_name,
+        chain_name=chain_name,
         callback_display_id=data.callback_display_id,
         mythic_task_id=step.mythic_task_id,
         tool_name=step.tool_name,
         command=step.command,
         status=step.status,
-        raw_output=step.raw_log
+        raw_output=step.raw_log,
+        llm_analysis=llm_a
+    )
+
+
+@router.post(
+    "/run-agent-command",
+    description="Run agent command on remote agent like libinject",
+    response_model=LocalCommandResponse
+)
+async def run_agent_command(
+    data: AgentCommandRequest,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> LocalCommandResponse:
+    """ post endpoint that get chain/phase -> run command on agent ->
+        save as AttackStep with chain id, combine and return with log """
+    chain_name, chain_id, phase_name = await get_chain_n_phase(
+        session, data.chain_name, current_user
+    )
+    step, llm_a = await check_and_process_agent_cmd(
+        data.callback_display_id, chain_id, data.command,
+        'agent_' + data.tool, data.tool, phase_name)
+    # add attack step with phase
+    session.add(step)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+        ) from exc
+    return LocalCommandResponse(  # temp
+        user_id=current_user.user_id,
+        chain_name=chain_name,
+        callback_display_id=data.callback_display_id,
+        mythic_task_id=step.mythic_task_id,
+        tool_name=step.tool_name,   # already agent_ cuz from AttackStep
+        command=step.command,
+        status=step.status,
+        raw_output=step.raw_log,
+        llm_analysis=llm_a
     )
 
 
@@ -269,12 +323,23 @@ async def perform_chain_step(steps: List[AttackStep], zero_display_id):
             display_id=zero_display_id,
             # display_id=step.agent[N].os_type or "Windows" # FIXME: agent
             # p_os_type=step.agent[N].os_type or "Windows"
-        )
+        )  # temp
+        resp_step = {
+            "step_id": result.id,
+            "chain_id": result.chain_id,
+            "phase": result.phase,
+            "tool_name": result.tool_name,
+            "mythic_payload_uuid": result.mythic_payload_uuid,
+            "status": result.status,
+            "raw_log": result.raw_log,
+            "command": result.command
+        }
         out_d = {
-            "AttackStep": result.model_dump(),
+            # result.model_dump() -> pydantic issue #6554
+            "AttackStep": resp_step,
             "LLM_analysis": llm_a
         }
-        yield json.dumps(out_d) + "\n"
+        yield json.dumps(out_d, default=str) + "\n"
 
 
 @router.post(
