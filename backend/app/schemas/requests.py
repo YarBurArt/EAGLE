@@ -35,6 +35,13 @@ class LocalCommandRequest(BaseRequest):
     command: str
 
 
+class AgentCommandRequest(BaseRequest):
+    chain_name: str
+    callback_display_id: int
+    command: str
+    tool: Optional[str] = "shell"
+
+
 class ActionApprovalRequest(BaseModel):
     """Модель запроса для одобрения действий"""
     command: str

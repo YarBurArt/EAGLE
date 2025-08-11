@@ -197,10 +197,8 @@ async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
     callback = next(
         (i for i in result if i.get("id") == callback_display_id),
         None)
-    payload: dict = None
-    if callback:
-        payload = callback.get("payload")
-    if payload:
+    # walrus almost like go, if payload is none -> ret default
+    if callback and (payload := callback.get("payload")):
         return payload.get("id"), payload.get("uuid")
     # default null/fake
     return 1, uuid.uuid4()
