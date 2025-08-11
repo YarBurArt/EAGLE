@@ -21,3 +21,7 @@ Please provide:
 Format as JSON with fields: setup_commands, execution_commands, verification_commands, cleanup_commands
 Each field should be an array of command strings.
 """
+    SYSTEM_PROMT = """
+            You are an expert penetration testing assistant. Provide concise, actionable suggestions.
+            All responses must be in valid JSON format.
+            """

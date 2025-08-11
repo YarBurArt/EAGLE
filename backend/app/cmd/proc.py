@@ -5,7 +5,7 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 import time
 import hashlib
 from typing import Tuple
-
+from app.core.llm_templ import LLMTemplates
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
     get_cmd_list_for_payload, execute_agent_command_o, create_payload_d
@@ -16,7 +16,20 @@ from app.cmd.llm_analysis import llm_service
 from app.core.config import (
     phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
 )
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 
+class ActionSuggestionsResponse(BaseModel):
+    """Pydantic model for LLM action suggestions response"""
+    phase: str
+    priorities: Optional[List[str]] = []
+    tools: Optional[List[str]] = []
+    attack_vectors: Optional[List[str]] = []
+    what_to_look_for: Optional[List[str]] = []
+    next_steps: Optional[List[str]] = []
+    commands: Optional[List[str]] = []
+    error: Optional[str] = None
+    format: Optional[str] = "json"
 
 async def init_agent():
     """ generate payload ->
@@ -177,18 +190,48 @@ async def analyze_command_output_with_llm(output: str, command: str) -> str:
 
 
 async def is_command_allowed_in_phase(
-    cmd: str, phase_name: str, payload_type: str, os_type: str
+        cmd: str, phase_name: str, payload_type: str, os_type: str
 ) -> bool:
     """ check command for allowed, we dont want to ransomware """
     allowed_commands = get_commands_for_phase(phase_name)
+
     # FIXME: for payload type format
-    # allowed_commands += await get_cmd_list_for_payload(payload_type, os_type)
-    # Можно сделать частичное совпадение или регулярки
-    return any(
-        cmd.strip().startswith(
-            allowed.split()[0]
-        ) for allowed in allowed_commands
-    )
+    # Get additional allowed commands based on payload type and OS
+    payload_commands = await get_cmd_list_for_payload(payload_type, os_type)
+    allowed_commands.extend(payload_commands)
+
+    # Normalize command for comparison
+    cmd_normalized = cmd.strip().lower()
+
+    # Check for exact matches and partial matches
+    for allowed in allowed_commands:
+        allowed_normalized = allowed.strip().lower()
+
+        # Exact match
+        if cmd_normalized == allowed_normalized:
+            return True
+
+        # Partial match - command starts with allowed command
+        if cmd_normalized.startswith(allowed_normalized.split()[0]):
+            return True
+
+        # Check if allowed command is a substring of the input command
+        if allowed_normalized in cmd_normalized:
+            return True
+
+    # Additional security checks
+    # Block dangerous commands
+    dangerous_patterns = [
+        'rm -rf', 'format', 'del /f', 'rmdir /s',
+        'shutdown', 'reboot', 'poweroff', 'dd if=/dev/zero',
+        'chmod 777', 'chown root', 'sudo rm'
+    ]
+
+    for pattern in dangerous_patterns:
+        if pattern in cmd_normalized:
+            return False
+
+    return False
 
 
 def get_commands_for_phase(phase_name: str):
@@ -205,33 +248,38 @@ async def suggest_actions_for_phase(
 
 
 async def generate_action_suggestions_with_llm(
-    phase_name: str, context_summary: str = ""
+        phase_name: str, context_summary: str = ""
 ) -> dict:
     """Use LLM to refine suggestions based on summary or logs"""
     try:
-        # TODO: system prompt, generate also command agent for Agent
+
+
         base_prompt = phase_prompts.get(phase_name, phase_prompts["recon"])
         prompt = base_prompt.format(
             # cuz a = None or 1 will return 1
             context=context_summary or "No context provided"
         )
-        llm_response = await llm_service.query_llm(prompt)
+
+        # Combine system prompt with user prompt
+        full_prompt = f"{LLMTemplates.SYSTEM_PROMT}\n\n{prompt}"
+        llm_response = await llm_service.query_llm(full_prompt)
 
         try:
             import json
             suggestions = json.loads(llm_response)
             return suggestions
         except json.JSONDecodeError:
-            # TODO: pydantic model for return
-            return {
-                "phase": phase_name,
-                "suggestions": llm_response,
-                "format": "text"
-            }
+            response = ActionSuggestionsResponse(
+                phase=phase_name,
+                suggestions=llm_response,
+                format="text"
+            )
+            return response.dict()
 
     except Exception as e:
-        return {
-            "phase": phase_name,
-            "error": f"Error generating suggestions: {str(e)}",
-            "suggestions": []
-        }
+        response = ActionSuggestionsResponse(
+            phase=phase_name,
+            error=f"Error generating suggestions: {str(e)}",
+            suggestions=[]
+        )
+        return response.dict()
