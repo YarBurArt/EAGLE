@@ -115,8 +115,8 @@ async def get_cmd_list_for_payload(
     cmd_list: List[str] = []
     for cmd in resp:
         at_os = cmd['attributes']['supported_os']
-        if not at_os or os_type in at_os:
-            cmd_list.append(['cmd'])
+        if not at_os or os_type in at_os:  # [] means any os
+            cmd_list.append(cmd['cmd'])
     return cmd_list  # os already know
 
 

@@ -150,8 +150,7 @@ async def check_and_process_local_cmd(
     is_allowed_cmd = await is_command_allowed_in_phase(
         cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
     )
-    # FIXME: phase names for commands
-    # assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
+    assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
     # send command to C2
     ex_result: AgentCommandOutput = await execute_local_command(
         cmd, c_display_id
@@ -201,7 +200,6 @@ async def is_command_allowed_in_phase(
     """ check command for allowed, we dont want to ransomware """
     allowed_commands = get_commands_for_phase(phase_name)
 
-    # FIXME: for payload type format
     # Get additional allowed commands based on payload type and OS
     payload_commands = await get_cmd_list_for_payload(payload_type, os_type)
     allowed_commands.extend(payload_commands)
@@ -258,7 +256,6 @@ async def generate_action_suggestions_with_llm(
 ) -> dict:
     """Use LLM to refine suggestions based on summary or logs"""
     try:
-
 
         base_prompt = phase_prompts.get(phase_name, phase_prompts["recon"])
         prompt = base_prompt.format(
