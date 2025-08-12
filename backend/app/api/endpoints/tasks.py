@@ -420,7 +420,10 @@ async def generate_payload(request: PayloadRequest):
 
 
 @router.post("/api/llm/action/approve")
-async def approve_action(action_request: ActionApprovalRequest, session: AsyncSession = Depends(deps.get_session)):
+async def approve_action(
+    action_request: ActionApprovalRequest,
+    session: AsyncSession = Depends(deps.get_session)
+):
     """
     Endpoint for approved actions and execution with saving to AttackStep
     """
@@ -446,8 +449,9 @@ async def approve_action(action_request: ActionApprovalRequest, session: AsyncSe
         # Add to session and commit
         session.add(attack_step)
         try:
+            # Обновляем объект после сохранения
             await session.commit()
-            await session.refresh(attack_step)  # Обновляем объект после сохранения
+            await session.refresh(attack_step)
         except IntegrityError as exc:
             await session.rollback()
             raise HTTPException(
@@ -483,13 +487,13 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
                 detail="Command is required"
             )
         # Execute command on agent
-        output, mythic_task_id, mythic_payload_id, mythic_payload_uuid = await execute_local_command(
+        res: Tuple = await execute_local_command(
             action_request.command,
             action_request.agent_display_id
         )
-
+        output, mythic_task_id, mythic_payload_id, mythic_payload_uuid = res
         # Analyze output with LLM
-        llm_analysis_result = await analyze_command_output_with_llm(
+        llm_analysis_result: str = await analyze_command_output_with_llm(
             action_request.command,
             output
         )
@@ -509,7 +513,8 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
         return {
             "success": True,
             "attack_step": attack_step,
-            "message": "Action executed and saved to AttackStep successfully"
+            "message": "Action executed and saved to AttackStep successfully",
+            "llm analysis": str(llm_analysis_result)
         }
 
     except Exception as e:

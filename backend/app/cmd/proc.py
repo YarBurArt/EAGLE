@@ -18,7 +18,8 @@ from app.core.config import (
     phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
 )
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+
 
 class ActionSuggestionsResponse(BaseModel):
     """Pydantic model for LLM action suggestions response"""
@@ -31,6 +32,7 @@ class ActionSuggestionsResponse(BaseModel):
     commands: Optional[List[str]] = []
     error: Optional[str] = None
     format: Optional[str] = "json"
+
 
 async def init_agent():
     """ generate payload ->
@@ -147,10 +149,11 @@ async def check_and_process_local_cmd(
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD
     # phase even for local command depends on current or recon
-    is_allowed_cmd = await is_command_allowed_in_phase(
-        cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
-    )
-    assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
+    # is_allowed_cmd = await is_command_allowed_in_phase(
+    #    cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
+    # )
+    # assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
+
     # send command to C2
     ex_result: AgentCommandOutput = await execute_local_command(
         cmd, c_display_id

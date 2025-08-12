@@ -140,7 +140,8 @@ phases = ("Reconnaissance", "Resource Development",
 
 phase_prompts = {
     "recon": """
-    You are a penetration testing expert. Currently in the reconnaissance phase.
+    You are a penetration testing expert.
+    Currently in the reconnaissance phase.
     Based on the provided context, suggest the following actions:
 
     Context:
@@ -153,11 +154,13 @@ phase_prompts = {
     4. What to look for in results
     5. Next steps
 
-    Respond in JSON format with fields: priorities, tools, attack_vectors, what_to_look_for, next_steps
+    Respond in JSON format with fields:
+    priorities, tools, attack_vectors, what_to_look_for, next_steps
     """,
 
     "initial_access": """
-    You are a penetration testing expert. Currently in the initial access phase.
+    You are a penetration testing expert.
+    Currently in the initial access phase.
     Based on the provided context, suggest methods for gaining access:
 
     Context:
@@ -170,7 +173,8 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: access_methods, social_engineering, vulnerabilities, tools, next_steps
+    Respond in JSON format with fields:
+    access_methods, social_engineering, vulnerabilities, tools, next_steps
     """,
 
     "execution": """
@@ -187,7 +191,8 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: execution_methods, bypass_techniques, stealth_methods, tools, next_steps
+    Respond in JSON format with fields:
+    execution_methods, bypass_techniques, stealth_methods, tools, next_steps
     """,
 
     "persistence": """
@@ -204,11 +209,13 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: persistence_methods, stealth_techniques, backdoors, tools, next_steps
+    Respond in JSON format with fields:
+    persistence_methods, stealth_techniques, backdoors, tools, next_steps
     """,
 
     "privilege_escalation": """
-    You are a penetration testing expert. Currently in the privilege escalation phase.
+    You are a penetration testing expert.
+    Currently in the privilege escalation phase.
     Based on the provided context, suggest privilege escalation methods:
 
     Context:
@@ -221,7 +228,9 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: escalation_methods, kernel_vulnerabilities, misconfigurations, tools, next_steps
+    Respond in JSON format with fields:
+    escalation_methods, kernel_vulnerabilities, misconfigurations,
+    tools, next_steps
     """,
 
     "discovery": """
@@ -238,11 +247,14 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: system_info_methods, network_discovery, account_discovery, tools, next_steps
+    Respond in JSON format with fields:
+    system_info_methods, network_discovery, account_discovery,
+    tools, next_steps
     """,
 
     "lateral_movement": """
-    You are a penetration testing expert. Currently in the lateral movement phase.
+    You are a penetration testing expert.
+    Currently in the lateral movement phase.
     Based on the provided context, suggest network movement methods:
 
     Context:
@@ -255,7 +267,9 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: movement_methods, network_techniques, credential_usage, tools, next_steps
+    Respond in JSON format with fields:
+    movement_methods, network_techniques, credential_usage,
+    tools, next_steps
     """,
 
     "collection": """
@@ -272,11 +286,14 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: collection_methods, target_data_types, exfiltration_techniques, tools, next_steps
+    Respond in JSON format with fields:
+    collection_methods, target_data_types, exfiltration_techniques,
+    tools, next_steps
     """,
 
     "command_and_control": """
-    You are a penetration testing expert. Currently in the command and control phase.
+    You are a penetration testing expert.
+    Currently in the command and control phase.
     Based on the provided context, suggest C2 methods:
 
     Context:
@@ -289,7 +306,8 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: c2_methods, traffic_obfuscation, protocols, tools, next_steps
+    Respond in JSON format with fields:
+    c2_methods, traffic_obfuscation, protocols, tools, next_steps
     """,
 
     "exfiltration": """
@@ -306,7 +324,8 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: exfiltration_methods, bypass_techniques, data_channels, tools, next_steps
+    Respond in JSON format with fields:
+    exfiltration_methods, bypass_techniques, data_channels, tools, next_steps
     """,
 
     "impact": """
@@ -323,7 +342,8 @@ phase_prompts = {
     4. Tools to use
     5. Next steps
 
-    Respond in JSON format with fields: impact_methods, availability_attacks, trace_removal, tools, next_steps
+    Respond in JSON format with fields:
+    impact_methods, availability_attacks, trace_removal, tools, next_steps
     """
 }
 

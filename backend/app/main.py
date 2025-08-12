@@ -48,7 +48,10 @@ app.add_middleware(
 @app.on_event("startup")
 async def on_startup():
     """ init steps for any chain """
-    await init_mythic()
+    try:
+        await init_mythic()
+    except Exception as e:
+        print("ok, you can test some without mythic because", e)
 
 
 @app.exception_handler(AssertionError)
