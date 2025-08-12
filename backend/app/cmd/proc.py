@@ -9,10 +9,11 @@ from typing import Tuple
 from app.core.llm_templ import LLMTemplates
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
-    get_cmd_list_for_payload, execute_agent_command_o, create_payload_d
+    get_cmd_list_for_payload, execute_agent_command_o,
+    create_payload_d, get_agent_callback_after, get_payload_ids
 )
 import app.cmd.c2_tool as c2_tool_c_cmd
-from app.models import AttackStep
+from app.models import AttackStep, Agent
 from app.cmd.llm_analysis import llm_service
 from app.core.config import (
     phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
@@ -50,7 +51,7 @@ async def process_approved_cmd(
         no db changes to AttackStep by default cuz it depends on tasks """
     # tool_name like agent_libinject or local_impacket-wmiexec
     type_n, tool_n = tool_name.split("_", 1)
-    assert type_n in ['local', 'agent', 'custom', 'payload']
+    assert type_n in ['local', 'agent', 'custom', 'payload', "getcallback"]
 
     if type_n == "local":
         result, llm_a = await check_and_process_local_cmd(
@@ -64,6 +65,11 @@ async def process_approved_cmd(
             chain_id, tool_name, tool_n, p_os_type, p_lport
         )  # next process by payload uuid
         return result, llm_a
+    if type_n == "getcallback":
+        result, _ = await process_new_callback(
+            chain_id, tool_name, cmd, phase_name, 1
+        )
+        return result, ''
     if type_n == "agent":
         result, llm_a = await check_and_process_agent_cmd(
             display_id, chain_id, cmd,  # cmd is just parameters
@@ -84,6 +90,30 @@ async def process_approved_cmd(
             strings_out, cmd
         )
         return result, llm_analysis
+
+
+async def process_new_callback(
+    chain_id, tool_name, cmd, phase_name, parent_step_id
+) -> Tuple[AttackStep, Agent]:
+    """ for save to Agent table by callback """
+    res = await get_agent_callback_after(cmd)  # cmd is rhost
+    os_type, status, display_id = res
+    p_id, p_uuid = await get_payload_ids(display_id)
+    return AttackStep(
+        phase=phase_name,
+        chain_id=chain_id, status=status,
+        tool_name=tool_name, command=cmd,
+        mythic_task_id=0,  # just created
+        mythic_payload_id=p_id,
+        mythic_payload_uuid=p_uuid,
+        raw_log=str(res),
+    ), Agent(
+        step_id=parent_step_id,  # not connected to reproduce as step
+        agent_name=f"{os_type}#{str(display_id)}",
+        os_type=os_type,
+        status=status,
+        callback_display_id=display_id
+    )
 
 
 async def check_and_process_agent_cmd(

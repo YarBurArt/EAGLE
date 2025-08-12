@@ -3,6 +3,7 @@ Module that handles all responsibilities related
 to working with Mythic C2
 """
 import os
+import json
 import uuid
 import socket
 from typing import List, Tuple
@@ -146,7 +147,41 @@ async def c2_pivoting_agent(display_id, lport, agent_type) -> str:
     return status
 
 
-async def get_agent_callback(rhost) -> Tuple[str, str, int]:
+async def get_agent_callback_after(rhost) -> Tuple[str, str, int]:
+    """ get os, status, display_id of new callback,
+        you must run this after payload """
+    # payload is delivered and start by user cuz diversity of RCE
+    global mythic_instance
+
+    # custom query that will be wrapped in custom_return_attributes for GraphQL
+    custom_attributes = """
+    id
+    host
+    ip
+    user
+    payload {
+        os
+        id
+        uuid
+    }
+    """
+    result = await mythic.get_all_active_callbacks(
+        mythic=mythic_instance, custom_return_attributes=custom_attributes
+    )
+    # callback id == display id for most cases
+    if (res_c := next((     # JS like style for value safe
+        (i['payload']['os'], i['id'])   # select to next os and id
+        for i in result
+        for ip in json.loads(i['ip'])  # json for ip deserialization
+        if ip == rhost      # check for our RHOST
+    ), None)):      # otherwise return default
+        os_type, d_id = res_c
+        return os_type, 'success', d_id
+
+    return "Linux", "fail", 1
+
+
+async def get_agent_callback_before(rhost) -> Tuple[str, str, int]:
     """ get os, status, display_id of new callback,
         you must run payload after this func or with timeout """
     # payload is delivered and start by user cuz diversity of RCE
@@ -184,8 +219,7 @@ async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
 
     # custom query that will be wrapped in custom_return_attributes for GraphQL
     custom_attributes = """
-    host
-    display_id
+    id
     payload {
         id
         uuid
@@ -194,6 +228,7 @@ async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
     result = await mythic.get_all_active_callbacks(
         mythic=mythic_instance, custom_return_attributes=custom_attributes
     )
+    # callback id == display id for most cases
     callback = next(
         (i for i in result if i.get("id") == callback_display_id),
         None)
