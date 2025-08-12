@@ -66,3 +66,10 @@ class AttackStepResponse(BaseResponse):
     mythic_payload_uuid: str | UUID4
     status: str
     raw_log: str
+
+
+class NewAgentResponse(BaseResponse):
+    callback_display_id: int
+    status: str
+    os_type: str
+    rhost: str

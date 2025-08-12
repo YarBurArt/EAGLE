@@ -19,7 +19,7 @@ from app.cmd.llm_analysis import llm_service
 from app.api import deps
 from app.core.config import phases
 from app.models import (
-    User, AttackChain, AttackStep, CurrentAttackPhase
+    User, AttackChain, AttackStep, CurrentAttackPhase, Agent
 )
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest,
@@ -28,12 +28,12 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse  # , AttackStepResponse
+    NewPhaseResponse, NewAgentResponse  # , AttackStepResponse
 )
 from app.cmd.proc import (
     check_and_process_local_cmd, get_agent_status,
     analyze_command_output_with_llm, process_approved_cmd,
-    check_and_process_agent_cmd
+    check_and_process_agent_cmd, process_new_callback
 )
 
 
@@ -160,6 +160,7 @@ async def run_agent_command(
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, data.chain_name, current_user
     )
+    # FIXME: display_id from rhost Agent
     step, llm_a = await check_and_process_agent_cmd(
         data.callback_display_id, chain_id, data.command,
         'agent_' + data.tool, data.tool, phase_name)
@@ -183,6 +184,54 @@ async def run_agent_command(
         status=step.status,
         raw_output=step.raw_log,
         llm_analysis=llm_a
+    )
+
+
+@router.post(
+    "/update-agents",
+    description="Add agent to chain with save as AttackStep, Agent",
+    response_model=NewAgentResponse
+)
+async def update_agent(
+    rhost: str,
+    chain_name: str,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> NewAgentResponse:
+    """ you run new agent with RCE, by this save to DB """
+    chain_name, chain_id, phase_name = await get_chain_n_phase(
+        session, chain_name, current_user
+    )
+    chain_steps_list = await session.execute(
+        select(AttackStep).where(
+            AttackStep.chain_id == chain_id,
+        ))
+    # we suppose that the previous step was run payload
+    chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
+    last_step = max(
+        chain_steps_l_ca,
+        key=lambda step: step.update_time
+    )
+    res: Tuple[AttackStep, Agent] = await process_new_callback(
+        chain_id=chain_id, tool_name="getcallback_get_agent_callback_after",
+        cmd=rhost, phase_name=phase_name, parent_step_id=last_step.id
+    )
+    get_callback_step, new_agent = res
+    session.add(get_callback_step)
+    session.add(new_agent)  # TODO: connect by p step id
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+        ) from exc
+    return NewAgentResponse(
+        os_type=new_agent.os_type,
+        rhost=rhost,
+        status=new_agent.status,
+        callback_display_id=new_agent.callback_display_id
     )
 
 

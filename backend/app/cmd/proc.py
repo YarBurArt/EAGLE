@@ -51,7 +51,7 @@ async def process_approved_cmd(
         no db changes to AttackStep by default cuz it depends on tasks """
     # tool_name like agent_libinject or local_impacket-wmiexec
     type_n, tool_n = tool_name.split("_", 1)
-    assert type_n in ['local', 'agent', 'custom', 'payload']
+    assert type_n in ['local', 'agent', 'custom', 'payload', "getcallback"]
 
     if type_n == "local":
         result, llm_a = await check_and_process_local_cmd(
