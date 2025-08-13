@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 
 from app.api import api_messages
-from app.api.endpoints import auth, users, tasks, llm
+from app.api.endpoints import auth, users, tasks, llm, kill_chain
 
 auth_router = APIRouter()
 auth_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -42,3 +42,5 @@ api_router = APIRouter(
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(tasks.router, prefix="/cmd", tags=["tasks"])
 api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
+api_router.include_router(
+    kill_chain.router, prefix="/export-chain", tags=["kill-chain"])
