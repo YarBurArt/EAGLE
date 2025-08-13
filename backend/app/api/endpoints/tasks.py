@@ -3,7 +3,7 @@ Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
 import json
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request
@@ -161,12 +161,15 @@ async def run_agent_command(
         session, data.chain_name, current_user
     )
     # FIXME: display_id from rhost Agent
-    step, llm_a = await check_and_process_agent_cmd(
+    step, llm_a, c_agent = await check_and_process_agent_cmd(
         data.callback_display_id, chain_id, data.command,
         'agent_' + data.tool, data.tool, phase_name)
     # add attack step with phase
     session.add(step)
     try:
+        await session.commit()
+        c_agent.step_id = step.id  # test me
+        session.add(c_agent)
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
@@ -174,6 +177,7 @@ async def run_agent_command(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
         ) from exc
+
     return LocalCommandResponse(  # temp
         user_id=current_user.user_id,
         chain_name=chain_name,
@@ -363,15 +367,30 @@ async def set_phase(
     )
 
 
-async def perform_chain_step(steps: List[AttackStep], zero_display_id):
+async def perform_chain_step(
+    steps: List[AttackStep], zero_display_id: int, session: AsyncSession
+) -> Dict:
     """ generator to yield result of each step """
     for step in steps:
-        result, llm_a = await process_approved_cmd(
+        # TODO: it can be really slow, but works
+        res_agent = await session.execute(
+            select(Agent).where(
+                Agent.step_id == step.id
+            )
+        )
+        c_agent: Agent = res_agent.scalars().first()
+        if c_agent:
+            display_id = c_agent.callback_display_id
+            p_os_type = c_agent.os_type
+        else:
+            display_id = zero_display_id
+            p_os_type = "Windows"  # cuz most popular target
+        # _ is new agent what we dont need
+        result, llm_a, _ = await process_approved_cmd(
             cmd=step.command, chain_id=step.chain_id,
             tool_name=step.tool_name, phase_name=step.phase,
-            display_id=zero_display_id,
-            # display_id=step.agent[N].os_type or "Windows" # FIXME: agent
-            # p_os_type=step.agent[N].os_type or "Windows"
+            display_id=display_id,
+            p_os_type=p_os_type
         )  # temp
         resp_step = {
             "step_id": result.id,
@@ -408,7 +427,7 @@ async def run_chain(
         )
     )
     chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
-    # FIXME: that's slower that via SQLalchemy
+    # TODO: that's slower that via SQLalchemy
     # generate list of successed steps and filter by last update_time
     f_sorted_steps = sorted(
         (i for i in chain_steps_l_ca if i.status == "success"),
@@ -416,7 +435,7 @@ async def run_chain(
     )
     # maybe better with WS
     return StreamingResponse(
-        perform_chain_step(f_sorted_steps, zero_display_id),
+        perform_chain_step(f_sorted_steps, zero_display_id, session),
         media_type="application/json"
     )
 

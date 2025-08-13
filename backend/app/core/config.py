@@ -55,6 +55,8 @@ class Mythic(BaseModel):
     username: str = "mythic_admin"
     password: SecretStr = SecretStr("passwd-change-me")
     server_port: int = 7443
+    payload_port_http: int = 80
+    payload_port_dns: int = 5353
     timeout: int = -1
 
 

@@ -10,7 +10,8 @@ from app.core.llm_templ import LLMTemplates
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
     get_cmd_list_for_payload, execute_agent_command_o,
-    create_payload_d, get_agent_callback_after, get_payload_ids
+    create_payload_d, get_agent_callback_after, get_payload_ids,
+    get_os_by_display_id
 )
 import app.cmd.c2_tool as c2_tool_c_cmd
 from app.models import AttackStep, Agent
@@ -45,8 +46,8 @@ async def init_agent():
 
 async def process_approved_cmd(
     cmd: str, chain_id: int, tool_name: str, display_id: int,
-    phase_name: str, p_lport: int = 4329, p_os_type: str = "Windows",
-) -> Tuple[AttackStep, str]:
+    phase_name: str, p_lport: int = -1, p_os_type: str = "Windows",
+):
     """ based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
         no db changes to AttackStep by default cuz it depends on tasks """
     # tool_name like agent_libinject or local_impacket-wmiexec
@@ -59,24 +60,24 @@ async def process_approved_cmd(
             c_display_id=display_id,
             chain_id=chain_id, phase_name=phase_name
         )
-        return result, llm_a
+        return result, llm_a, ''
     if type_n == "payload":
         result, llm_a = await check_and_create_mpayload(
             chain_id, tool_name, tool_n, p_os_type, p_lport
         )  # next process by payload uuid
-        return result, llm_a
+        return result, llm_a, ''
     if type_n == "getcallback":
-        result, _ = await process_new_callback(
+        result, agent = await process_new_callback(
             chain_id, tool_name, cmd, phase_name, 1
         )
-        return result, ''
+        return result, '', agent
     if type_n == "agent":
-        result, llm_a = await check_and_process_agent_cmd(
+        result, llm_a, agent = await check_and_process_agent_cmd(
             display_id, chain_id, cmd,  # cmd is just parameters
             tool_name, tool_n,  # actual command like libinject
             phase_name
         )
-        return result, llm_a
+        return result, llm_a, agent
     if type_n == "custom":
         # any other scenarios based on custom C2 functions in c2_tool
         if not hasattr(c2_tool_c_cmd, tool_n):
@@ -89,7 +90,7 @@ async def process_approved_cmd(
         llm_analysis = await analyze_command_output_with_llm(
             strings_out, cmd
         )
-        return result, llm_analysis
+        return result, llm_analysis, ''
 
 
 async def process_new_callback(
@@ -129,6 +130,8 @@ async def check_and_process_agent_cmd(
     llm_analysis = await analyze_command_output_with_llm(
         result.output, cmd
     )
+    # for reproducibility
+    rhost, agent_os, agent_status = await get_os_by_display_id(display_id)
     return AttackStep(
         phase=phase,
         chain_id=chain_id, status="success",
@@ -137,7 +140,13 @@ async def check_and_process_agent_cmd(
         mythic_payload_id=result.mythic_payload_id,
         mythic_payload_uuid=result.mythic_payload_uuid,
         raw_log=result.output,
-    ), llm_analysis
+    ), llm_analysis, Agent(
+        step_id=1,  # need update in tasks
+        os_type=agent_os,
+        status=agent_status,
+        agent_name=str(display_id) + "#" + rhost,
+        callback_display_id=display_id
+    )
 
 
 async def check_and_create_mpayload(

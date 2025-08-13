@@ -69,8 +69,8 @@ async def create_payload_d(
             s.connect(("1.1", 80))
             lhost = s.getsockname()[0]
     if lport == -1:
-        # todo create profile, check and get, or just custom query
-        pass
+        # user must setup profile with zero agent
+        lport = os.getenv('MYTHIC__PAYLOAD_PORT_HTTP')
     payload_response = await mythic.create_payload(
         mythic=mythic_instance,
         payload_type_name=payload_type,
@@ -179,6 +179,29 @@ async def get_agent_callback_after(rhost) -> Tuple[str, str, int]:
         return os_type, 'success', d_id
 
     return "Linux", "fail", 1
+
+
+async def get_os_by_display_id(display_id) -> Tuple[str, str, str]:
+    """ get OS/hostname by callback display id to Agent """
+    custom_attributes = """
+    id
+    host
+    payload {
+        os
+    }
+    """
+    # maybe caching is possible here
+    result = await mythic.get_all_active_callbacks(
+        mythic=mythic_instance, custom_return_attributes=custom_attributes
+    )
+    if (res_c := next((
+        (i['host'], i['payload']['os'])  # select agent host, payload os
+        for i in result
+        if i['id'] == display_id
+    ), None)):      # otherwise return default
+        host, os_type = res_c
+        return host, os_type, 'success'
+    return "windows", "Windows", "fail"
 
 
 async def get_agent_callback_before(rhost) -> Tuple[str, str, int]:
