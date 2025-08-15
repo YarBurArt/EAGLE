@@ -38,7 +38,7 @@ cd ./EAGLE/backend
 At this point, you need to set .env in EAGLE/backend like this, port of db must be different than Mythic C2 postgres, `MYTHIC__` variables should be taken from your `Mythic/.env`
 ```env
 SECURITY__JWT_SECRET_KEY=super_secret_key
-SECURITY__BACKEND_CORS_ORIGINS=["http://localhost:3000","http://localhost:8001"]
+SECURITY__BACKEND_CORS_ORIGINS=["http://127.0.0.1:3001","http://localhost:8001", "http://localhost:8000", "http://127.0.0.1:8000"]
 SECURITY__ALLOWED_HOSTS=["localhost", "127.0.0.1"]
 
 DATABASE__HOSTNAME=localhost

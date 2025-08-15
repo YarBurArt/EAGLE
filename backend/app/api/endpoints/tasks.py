@@ -3,12 +3,14 @@ Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
 import json
+import asyncio
 from typing import List, Tuple, Dict
 
 from fastapi import (
-    APIRouter, Depends, HTTPException, status, Request
+    APIRouter, Depends, HTTPException, status, Request,
+    WebSocket, WebSocketDisconnect
 )
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from app.core.llm_templ import LLMTemplates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -367,12 +369,28 @@ async def set_phase(
     )
 
 
+class ChainController:
+    def __init__(self):
+        self.active_chains = {}
+
+    def cancel_chain(self, chain_id: int):
+        if chain_id in self.active_chains:
+            # stop by asyncio.Event()
+            self.active_chains[chain_id].set()
+
+
+chain_controller = ChainController()
+
+
 async def perform_chain_step(
-    steps: List[AttackStep], zero_display_id: int, session: AsyncSession
+    steps: List[AttackStep], zero_display_id: int,
+    session: AsyncSession, cancel_event: asyncio.Event
 ) -> Dict:
     """ generator to yield result of each step """
     for step in steps:
-        # TODO: it can be really slow, but works
+        if cancel_event.is_set():  # check asyncio.Event status
+            print("\nINFO [-] chain is cancel\n")
+            break
         res_agent = await session.execute(
             select(Agent).where(
                 Agent.step_id == step.id
@@ -407,6 +425,7 @@ async def perform_chain_step(
             "AttackStep": resp_step,
             "LLM_analysis": llm_a
         }
+        # back to StreamingResponse
         yield json.dumps(out_d, default=str) + "\n"
 
 
@@ -421,23 +440,74 @@ async def run_chain(
     current_user: User = Depends(deps.get_current_user),
 ) -> StreamingResponse:
     """ executes commands via proc in order of time """
+    global chain_controller  # FIXME
     chain_steps_list = await session.execute(
         select(AttackStep).where(
             AttackStep.chain_id == chain_id,
         )
     )
     chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
-    # TODO: that's slower that via SQLalchemy
     # generate list of successed steps and filter by last update_time
-    f_sorted_steps = sorted(
+    f_sorted_steps = sorted(  # TODO: that's slower that via SQLalchemy
         (i for i in chain_steps_l_ca if i.status == "success"),
         key=lambda step: step.update_time
     )
-    # maybe better with WS
+    # to interrupt globally specific chain
+    cancel_event = asyncio.Event()
+    chain_controller.active_chains[chain_id] = cancel_event
     return StreamingResponse(
-        perform_chain_step(f_sorted_steps, zero_display_id, session),
+        perform_chain_step(
+            f_sorted_steps, zero_display_id, session, cancel_event
+        ),
         media_type="application/json"
     )
+
+
+@router.websocket("/ws/cancel-chain/{chain_id}")
+async def cancel_chain_ws(
+    websocket: WebSocket, chain_id: int,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+):
+    global chain_controller  # FIXME
+    await websocket.accept()
+    try:
+        chain_name = await websocket.receive_text()
+        chain_ca_list: List[AttackChain] = await session.execute(
+            select(AttackChain).where(
+                AttackChain.id == chain_id,
+            )
+        )
+        chain_ca: AttackChain = chain_ca_list.scalars().first()
+        print(chain_name)
+        if chain_name == chain_ca.chain_name:
+            # cancel chain via global chain controller
+            chain_controller.cancel_chain(chain_id)
+    except WebSocketDisconnect:
+        pass
+
+
+@router.post("/cancel-chain/{chain_id}")
+async def cancel_chain_a_http(
+    chain_id: int, chain_name,
+    session: AsyncSession = Depends(deps.get_session)
+):
+    global chain_controller  # FIXME
+    chain_ca_list: List[AttackChain] = await session.execute(
+        select(AttackChain).where(
+            AttackChain.id == chain_id,
+        )
+    )
+    chain_ca: AttackChain = chain_ca_list.scalars().first()
+    print(chain_name)
+    if chain_name == chain_ca.chain_name:
+        # cancel chain via global chain controller
+        chain_controller.cancel_chain(chain_id)
+
+    return JSONResponse(content={
+        "status": "canceled",
+        "chain_name": chain_name
+    })
 
 
 @router.post("/api/llm/generate/payload")
