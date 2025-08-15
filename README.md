@@ -52,6 +52,7 @@ MYTHIC__USERNAME=super_secret_user
 MYTHIC__PASSWORD=super_secret_password
 MYTHIC__SERVER_PORT=7443
 MYTHIC__TIMEOUT=-1
+MYTHIC__PAYLOAD_PORT_HTTP=1337
 ```
 If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also 
 ```env
@@ -83,3 +84,42 @@ python3.13 -m poetry shell  # if you exited
 
 uvicorn app.main:app --reload
 ```
+
+## Usage
+
+By default, the application runs at **http://127.0.0.1:8000** and connects to `Mythic C2` on startup.
+At this URL you’ll find the API with a `Swagger UI`.  Frontend is on **/f/index** for now.
+Registration is available via **/auth/register** using email/password , this is required because AttackChains are attached to users by ID. After registering, you can log in and obtain a JWT token via **/auth/access-token** (or via Swagger auth).
+> Note that the login field is the email you used during registration.
+
+Once authenticated, you can create a new attack chain with **/cmd/new-chain/**.
+A new chain with your specified name will be assigned an ID, which is used to attach steps to that chain.
+> For simplicity, utility names and their types are linked, a chain consists of individual steps, each connected to agents and containing information about the current attack phase.
+
+You can generate commands via the LLM, almost like a *pentest with LLM*.
+Currently, if a command not execute, it will not be saved to the database but LLM integration will be made more intuitive over time.
+
+The first commands are often Reconnaissance and run locally, so you need `Zero agent` and its `display_id`,
+which you include in requests to **/cmd/run-command**.
+
+For agent-specific commands, use **/cmd/run-agent-command**, also specifying the agent utility name, for local it's set as `shell`.
+Commands executed this way are immediately saved to the chain, 
+you can use the LLM to assist with command generation and output analysis.
+> Note that the LLM does not write directly to the database and LLM decisions are user-driven.
+
+You can create payloads via the LLM and route them through proc, 
+then run **/cmd/update-agents** to save remote agents in the database for reproducibility of the chain.
+
+You can set attack phases with **/cmd/next-phase/{chain_id}**
+or set a specific phase via **/cmd/set-phase/{chain_id}**.
+Chain status can be retrieved with **/cmd/chain-phase/{chain_id}**.
+> Note that if, for example, you uploaded a payload via a curl command using Mythic payload UUID, it will remain the old payload during replay because the agent-type attack step has already stored the original payload. This is done for simplicity and is one example of why our project’s stability depends on Mythic’s stability; you still need to use Mythic to some extent. *Profiles* for agent payloads are also created before run EAGLE.
+
+To run chain, use **/cmd/run-chain/{chain_id}**, which streams each step’s output as HTTP chunks.
+Emergency stop is available via WebSocket or HTTP cancel endpoints.
+For convenience and stability, a minimal frontend is provided at **/f/index**, offering command execution ( agent / local ),
+LLM-assisted output analysis, and chain management.
+
+Export a chain (with or without LLM analysis) via **/export-chain/json** or **/export-chain/yaml** to `JSON` or `YAML`.
+
+Similar to how diving into [Mythic python library](https://github.com/MythicMeta/Mythic_Scripting/blob/master/mythic/mythic.py) source code clarifies its functionality, examining the other Swagger endpoints and read `EAGLE` codebase provides deeper insight into using it effectively. If anything is unclear, write it in the [issues](https://github.com/eogod/EAGLE/issues) section.
