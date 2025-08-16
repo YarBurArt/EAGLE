@@ -14,7 +14,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse, JSONResponse
 from app.core.llm_templ import LLMTemplates
-from sqlalchemy import select
+from sqlalchemy import select, desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,7 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse, NewAgentResponse,  # , AttackStepResponse,
+    NewPhaseResponse, NewAgentResponse, AttackStepResponse,
     NewPayloadResponse
 )
 from app.cmd.proc import (
@@ -308,7 +308,7 @@ async def read_agent_status(
 
 @router.get(
     "/chain-phase/{chain_id}",
-    description="Get chain info and UCKC phase"
+    description="Get chain info and UCKC phase, last attack step"
 )
 async def read_chain_info(
     chain_id: int,
@@ -333,6 +333,16 @@ async def read_chain_info(
     )
     chain_c_phase = chain_c_phase_list.scalars().first()
     current_phase_n = chain_c_phase.phase or "Reconnaissance"
+    res_l_step = await session.execute(
+        select(AttackStep).where(
+            AttackStep.chain_id == chain_id
+        ).order_by(
+            desc(AttackStep.update_time)
+        ).limit(1)
+    )
+    # first because order by
+    last_attack_step_r: AttackStep = res_l_step.scalars().first()
+    last_attack_step = AttackStepResponse.from_orm(last_attack_step_r)
     return GetChainPhaseResponse(
         chain_id=chain_ca.id,
         user_id=chain_ca.user_id,
@@ -340,7 +350,8 @@ async def read_chain_info(
         username=chain_username,
         user_email=current_user.email,
         final_status=chain_ca.final_status,
-        current_phase_name=current_phase_n
+        current_phase_name=current_phase_n,
+        last_attack_step=last_attack_step
     )
 
 

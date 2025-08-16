@@ -1,7 +1,7 @@
 """
 Module to defining responses types and format
 """
-from typing import Optional
+from typing import Optional, ClassVar
 from pydantic import BaseModel, ConfigDict, EmailStr, UUID4
 
 
@@ -35,16 +35,6 @@ class NewPhaseResponse(BaseResponse):
     current_phase_name: str
 
 
-class GetChainPhaseResponse(BaseResponse):
-    chain_id: int
-    user_id: UUID4
-    chain_name: str
-    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
-    user_email: str
-    final_status: str
-    current_phase_name: str
-
-
 class LocalCommandResponse(BaseResponse):
     user_id: UUID4
     chain_name: str
@@ -58,14 +48,27 @@ class LocalCommandResponse(BaseResponse):
 
 
 class AttackStepResponse(BaseResponse):
-    step_id: Optional[int]
-    chain_id: Optional[str]
+    id: Optional[int]
+    chain_id: Optional[int]
     phase: str
     tool_name: str
     command: str
     mythic_payload_uuid: str | UUID4
     status: str
     raw_log: str
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(from_attributes=True)
+
+
+class GetChainPhaseResponse(BaseResponse):
+    chain_id: int
+    user_id: UUID4
+    chain_name: str
+    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
+    user_email: str
+    final_status: str
+    current_phase_name: str
+    last_attack_step: Optional[AttackStepResponse]
 
 
 class NewAgentResponse(BaseResponse):
