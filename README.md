@@ -108,7 +108,7 @@ you can use the LLM to assist with command generation and output analysis.
 > Note that the LLM does not write directly to the database and LLM decisions are user-driven.
 
 You can create payloads via the LLM and route them through proc, 
-then run **/cmd/update-agents** to save remote agents in the database for reproducibility of the chain.
+then run **/cmd/update-agents** to save remote agents in the database for reproducibility of the chain. If the task needs more precise adjustments, or the LLM makes a mistake somewhere, you should use **/cmd/new-agent** for create mythic payload via EAGLE in context of chain, then **/cmd/run-command** for uploading payload to the rhost and then also **/cmd/update-agents** .
 
 You can set attack phases with **/cmd/next-phase/{chain_id}**
 or set a specific phase via **/cmd/set-phase/{chain_id}**.
