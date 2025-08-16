@@ -58,8 +58,8 @@ class LocalCommandResponse(BaseResponse):
 
 
 class AttackStepResponse(BaseResponse):
-    step_id: int | None
-    chain_id: str | None
+    step_id: Optional[int]
+    chain_id: Optional[str]
     phase: str
     tool_name: str
     command: str
@@ -73,3 +73,15 @@ class NewAgentResponse(BaseResponse):
     status: str
     os_type: str
     rhost: str
+
+
+class NewPayloadResponse(BaseResponse):
+    chain_id: int
+    status: str
+    phase: str
+    payload_type: Optional[str]  # based on os
+    payload_uuid: str | UUID4
+    payload_id: Optional[int]
+    download_url: str
+    raw_log: Optional[str]
+    llm_analysis: str

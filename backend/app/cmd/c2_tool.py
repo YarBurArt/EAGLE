@@ -60,7 +60,7 @@ async def create_payload_d(
     file_name: str = "nt-merlin",
     lhost: str = "local",
     lport: int = 4329, os_type: str = "Windows",
-    payload_type: str = "merlin"
+    payload_type: str = "None"
 ) -> NewPayloadOutput:
     """ create payload and save, nt-merlin-http by default """
     if lhost == "local":
@@ -71,6 +71,14 @@ async def create_payload_d(
     if lport == -1:
         # user must setup profile with zero agent
         lport = os.getenv('MYTHIC__PAYLOAD_PORT_HTTP')
+    # set default payload mythic type for os
+    if payload_type == "None":  # cuz proc
+        payload_type = {
+            "Windows": "merlin",
+            "macOS": "poseidon",  # temp
+            "Linux": "poseidon"
+        }.get(os_type)
+
     payload_response = await mythic.create_payload(
         mythic=mythic_instance,
         payload_type_name=payload_type,
@@ -94,8 +102,6 @@ async def create_payload_d(
     p_uuid = payload_response["uuid"]
     p_id = payload_response["id"]
     # idk why, but uuid for download is different but also works
-    # download_url = f"https://{os.getenv('MYTHIC__SERVER_IP')}:{os.getenv(
-    #                    'MYTHIC__SERVER_PORT')}/direct/download/{p_uuid}"
     status = payload_response["build_phase"]
     raw_log = payload_response["build_message"]
     return NewPayloadOutput(

@@ -2,9 +2,11 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
+import os
 import json
 import asyncio
 from typing import List, Tuple, Dict
+from dotenv import load_dotenv
 
 from fastapi import (
     APIRouter, Depends, HTTPException, status, Request,
@@ -26,19 +28,22 @@ from app.models import (
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest,
     ActionApprovalRequest, ActionExecutionRequest,
-    PayloadRequest, AgentCommandRequest
+    PayloadRequest, AgentCommandRequest, NewAgentRequest
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse, NewAgentResponse  # , AttackStepResponse
+    NewPhaseResponse, NewAgentResponse,  # , AttackStepResponse,
+    NewPayloadResponse
 )
 from app.cmd.proc import (
     check_and_process_local_cmd, get_agent_status,
     analyze_command_output_with_llm, process_approved_cmd,
-    check_and_process_agent_cmd, process_new_callback
+    check_and_process_agent_cmd, process_new_callback,
+    check_and_create_mpayload
 )
 
 
+load_dotenv()
 router = APIRouter()
 
 
@@ -190,6 +195,53 @@ async def run_agent_command(
         status=step.status,
         raw_output=step.raw_log,
         llm_analysis=llm_a
+    )
+
+
+@router.post(
+    "/new-agent",
+    description="Create new mythic agent payload, return download url",
+    response_model=NewPayloadResponse
+)
+async def new_agent(
+    data: NewAgentRequest,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> NewPayloadResponse:
+    """ create new payload C2, save to mythic, return download url """
+    chain_name, chain_id, phase_name = await get_chain_n_phase(
+        session, data.chain_name, current_user
+    )
+    # None as string for step reproducibility via process_approved_cmd
+    p_type = "None" if data.payload_type is None else str(data.payload_type)
+    tool_name = "payload_" + p_type
+    payload_step, llm_a = await check_and_create_mpayload(
+        chain_id=chain_id, tool_name=tool_name, tool_n=p_type,
+        p_lport=-1,  # set as default from .env
+        p_os_type=data.os_type
+    )
+    session.add(payload_step)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+        ) from exc
+    # like https://10.2:7443/direct/download
+    #             /95917999-2eff-478c-b71a-6a81e2a83383
+    ip = os.getenv('MYTHIC__SERVER_IP')
+    port = os.getenv('MYTHIC__SERVER_PORT')
+    uuid = payload_step.mythic_payload_uuid
+    p_download_url = f"https://{ip}:{port}/direct/download/{uuid}"
+
+    return NewPayloadResponse(
+        chain_id=chain_id, status=payload_step.status,
+        phase=payload_step.phase, download_url=p_download_url,
+        payload_uuid=uuid, payload_id=payload_step.mythic_payload_id,
+        raw_log=payload_step.raw_log, llm_analysis=llm_a,
+        payload_type=payload_step.tool_name,  # TODO: fix to default types
     )
 
 

@@ -29,6 +29,12 @@ class NewChainRequest(BaseRequest):
     chain_name: str
 
 
+class NewAgentRequest(BaseRequest):
+    chain_name: str
+    os_type: str
+    payload_type: Optional[str]
+
+
 class LocalCommandRequest(BaseRequest):
     chain_name: str
     callback_display_id: int
