@@ -14,10 +14,12 @@ The project is developed using `FastAPI` + `PostgreSQL` (`SQLAlchemy 2.0` + `ale
 
 ## Requirements
 
-So far, this has been tested on latest `Kali Linux` and `Parrot OS`. Debian may need to build new python [from source](https://docs.python.org/3/using/unix.html#building-python
-).
+So far, this has been tested on latest `Kali Linux` and `Parrot OS`. Debian, if the version is lower than 13, may need to build new python [from source](https://docs.python.org/3/using/unix.html#building-python
+). The latest `Astra Linux` (Debian 10-12 with MAC policy) have the same problem, but for some reason install_docker_kali.sh works for the mythic, and it even considers the mythic and EAGLE containers secure. EAGLE itself can also work if mythic is on a remote host, zero agent is on another, and postgres is not in the container. On Windows, it is easiest to run it via `WSL2` on Ubuntu or Kali.
 
 The main requirement is `python3.13` and above.
+
+If you decide not to deploy using Docker, you should use `PostgreSQL 17`.
 
 The minimum RAM requirement is 4-8GB, but 16GB is recommended due to agents, profiles from Mythic C2, and zero agent itself.
 A minimum dual-core CPU , but it 's difficult with containers.
