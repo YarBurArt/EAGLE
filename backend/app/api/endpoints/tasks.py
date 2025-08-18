@@ -100,12 +100,14 @@ async def get_chain_n_phase(
     )
     # get first object of select
     chain_c: AttackChain = chain_ca.scalars().first()
+    assert chain_c is not None
     c_phase = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_c.id
         )
     )
     phase_name_ob: CurrentAttackPhase = c_phase.scalars().first()
+    assert phase_name_ob is not None
     phase_name: str = str(phase_name_ob.phase) or "Reconnaissance"
     return chain_c.chain_name, chain_c.id, phase_name
 
@@ -430,6 +432,38 @@ async def set_phase(
         chain_id=c_phase.chain_id,
         current_phase_name=c_phase.phase
     )
+
+
+@router.post(
+    "/reject-s/{chain_name}",
+    description="Reject the last suggested step in the current chain",
+    response_model=AttackStepResponse
+)
+async def reject_last_step_or_cmd(
+    chain_name: str,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user),
+) -> AttackStepResponse:
+    """ reject last step and delete from db """
+    # like temp check for user, chain_name code
+    chain_name_db, chain_id, phase_name = await get_chain_n_phase(
+        session, chain_name, current_user
+    )
+    res_l_step = await session.execute(
+        select(AttackStep).where(
+            # chain id from check by name
+            AttackStep.chain_id == chain_id
+        ).order_by(
+            desc(AttackStep.update_time)
+        ).limit(1)
+    )
+    # first because order by
+    last_attack_step_obj: AttackStep = res_l_step.scalars().first()
+    last_attack_step = AttackStepResponse.from_orm(last_attack_step_obj)
+    await session.delete(last_attack_step_obj)
+    await session.commit()
+
+    return last_attack_step
 
 
 class ChainController:
