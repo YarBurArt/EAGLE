@@ -103,6 +103,7 @@ Currently, if a command not execute, it will not be saved to the database but LL
 
 The first commands are often Reconnaissance and run locally, so you need `Zero agent` and its `display_id`,
 which you include in requests to **/cmd/run-command**.
+If you may have made a mistake and any command was somewhy saved to the DB, you can reject the last saved command in the chain and delete it via **/cmd/reject-s/{chain_name}**
 
 For agent-specific commands, use **/cmd/run-agent-command**, also specifying the agent utility name, for local it's set as `shell`.
 Commands executed this way are immediately saved to the chain, 
