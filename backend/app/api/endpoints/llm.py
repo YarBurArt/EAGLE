@@ -3,6 +3,7 @@ Module only for llm endpoints
 to simplify the creation of a chain relative to the user
 idk what is g4f.gui.run_gui()
 """
+import json
 from typing import Dict, Any
 
 from fastapi import (
@@ -11,7 +12,10 @@ from fastapi import (
 import g4f  # temp
 
 from app.cmd.llm_analysis import llm_service
-from app.schemas.requests import QueryRequest, CodeAnalysisRequest
+from app.core.llm_templ import LLMTemplates
+from app.schemas.requests import (
+    QueryRequest, CodeAnalysisRequest, PayloadRequest
+)
 
 router = APIRouter()
 
@@ -30,6 +34,52 @@ async def llm_query(request: QueryRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate/payload")
+async def generate_payload(request: PayloadRequest):
+    """
+    Генерирует пейлоады для penetration testing
+    """
+    try:
+        # Используем шаблон из конфигурации
+        prompt = LLMTemplates.PAYLOAD_GENERATION.format(
+            language=request.language,
+            description=request.description
+        )
+        result = await llm_service.query_llm(prompt)
+
+        # Используем шаблон для генерации команд
+        commands_prompt = LLMTemplates.COMMANDS_GENERATION.format(
+            language=request.language,
+            script=result
+        )
+
+        commands_result = await llm_service.query_llm(commands_prompt)
+
+        # Пытаемся распарсить команды
+        try:
+            commands_data = json.loads(commands_result)
+        except json.JSONDecodeError:
+            commands_data = {
+                "setup_commands": [],
+                "execution_commands": [],
+                "verification_commands": [],
+                "cleanup_commands": []
+            }
+
+        return {
+            "success": True,
+            "payload": result,
+            "commands": commands_data,
+            "language": request.language,
+            "description": request.description
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"generation error: {str(e)}"
+        ) from e
 
 
 @router.post("/analyze/code", description="Analyze and explain code via LLM")

@@ -58,7 +58,8 @@ async def on_startup():
     try:
         await init_mythic()
     except Exception as e:
-        print("ok, you can test some without mythic because", e)
+        print("\033[1;33mWARNING:   \033[0m"
+              "ok, you can test some without mythic because", e)
 
 
 @app.exception_handler(AssertionError)

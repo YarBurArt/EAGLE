@@ -54,6 +54,8 @@ class ActionApprovalRequest(BaseModel):
     agent_id: int
     chain_id: int
     phase: str
+    type_cmd: str
+    target_os_type: str
     approved_by: str
     reason: Optional[str] = ""
 

@@ -13,13 +13,11 @@ from fastapi import (
     WebSocket, WebSocketDisconnect
 )
 from fastapi.responses import StreamingResponse, JSONResponse
-from app.core.llm_templ import LLMTemplates
 from sqlalchemy import select, desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cmd.c2_tool import execute_local_command
-from app.cmd.llm_analysis import llm_service
 from app.api import deps
 from app.core.config import phases
 from app.models import (
@@ -28,7 +26,7 @@ from app.models import (
 from app.schemas.requests import (
     NewChainRequest, LocalCommandRequest,
     ActionApprovalRequest, ActionExecutionRequest,
-    PayloadRequest, AgentCommandRequest, NewAgentRequest
+    AgentCommandRequest, NewAgentRequest
 )
 from app.schemas.responses import (
     LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
@@ -607,75 +605,33 @@ async def cancel_chain_a_http(
     })
 
 
-@router.post("/api/llm/generate/payload")
-async def generate_payload(request: PayloadRequest):
-    """
-    Генерирует пейлоады для penetration testing
-    """
-    try:
-        # Используем шаблон из конфигурации
-        prompt = LLMTemplates.PAYLOAD_GENERATION.format(
-            language=request.language,
-            description=request.description
-        )
-        result = await llm_service.query_llm(prompt)
-
-        # Используем шаблон для генерации команд
-        commands_prompt = LLMTemplates.COMMANDS_GENERATION.format(
-            language=request.language,
-            script=result
-        )
-
-        commands_result = await llm_service.query_llm(commands_prompt)
-
-        # Пытаемся распарсить команды
-        try:
-            import json
-            commands_data = json.loads(commands_result)
-        except json.JSONDecodeError:
-            commands_data = {
-                "setup_commands": [],
-                "execution_commands": [],
-                "verification_commands": [],
-                "cleanup_commands": []
-            }
-
-        return {
-            "success": True,
-            "payload": result,
-            "commands": commands_data,
-            "language": request.language,
-            "description": request.description
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"generation error: {str(e)}"
-        ) from e
-
-
-@router.post("/api/llm/action/approve")
-async def approve_action(
+@router.post("/approve-action")
+async def approve_action_from_llm(
     action_request: ActionApprovalRequest,
     session: AsyncSession = Depends(deps.get_session)
 ):
     """
-    Endpoint for approved actions and execution with saving to AttackStep
+    Endpoint for approved actions and execution
+    with saving to AttackStep, Agent
     """
     try:
         # Execute the approved action
         result = await process_approved_cmd(
             cmd=action_request.command,
             chain_id=action_request.chain_id,
-            tool_name=f"local_{action_request.command.split()[0]}",
+            # like local_impacket -> on agent: shell impacket
+            tool_name=f"{
+                action_request.type_cmd
+            }_{action_request.command.split()[0]}",
             display_id=action_request.agent_id,
-            phase_name=action_request.phase
+            phase_name=action_request.phase,
+            p_os_type=action_request.target_os_type
         )
 
         if hasattr(result, '__await__'):
-            attack_step, llm_analysis = await result
+            attack_step, llm_analysis, agent = await result
         else:
-            attack_step, llm_analysis = result
+            attack_step, llm_analysis, agent = result
 
         # Update the existing attack_step with LLM analysis
         attack_step.llm_analysis = llm_analysis
@@ -687,6 +643,10 @@ async def approve_action(
             # Обновляем объект после сохранения
             await session.commit()
             await session.refresh(attack_step)
+            if agent != '':  # temp
+                agent.step_id = attack_step.id
+                session.add(agent)
+                await session.commit()
         except IntegrityError as exc:
             await session.rollback()
             raise HTTPException(
@@ -709,7 +669,7 @@ async def approve_action(
         ) from e
 
 
-@router.post("/api/llm/action/execute")
+@router.post("/api/llm/action/execute")  # temp
 async def execute_approved_action(action_request: ActionExecutionRequest):
     """
     Endpoint for executing approved actions with results saving
