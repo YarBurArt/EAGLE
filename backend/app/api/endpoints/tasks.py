@@ -518,7 +518,7 @@ async def perform_chain_step(
         out_d = {
             # result.model_dump() -> pydantic issue #6554
             "AttackStep": resp_step,
-            "LLM_analysis": llm_a
+            "llm_analysis": llm_a
         }
         # back to StreamingResponse
         yield json.dumps(out_d, default=str) + "\n"

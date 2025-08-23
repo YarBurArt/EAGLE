@@ -11,6 +11,7 @@ $(document).ready( () => {
     // cuz cors policy
     var myOrigin = 'http://127.0.0.1:8000';
     // var currentController = null;
+    const md = new markdownit();
 
     $('#loginForm').on('submit', e => {
         e.preventDefault();
@@ -40,7 +41,29 @@ $(document).ready( () => {
             }
         );
     });
+    const format_json_table = (response, elem_name) => {
+        var tableHtml = `
+            <table class="min-w-full border-collapse border border-gray-200">
+                <thead>
+                    <tr>
+                        <th class="border border-gray-300 p-2">Field</th>
+                        <th class="border border-gray-300 p-2">Value</th>
+                    </tr>
+                </thead>
+                <tbody>`;
 
+        for (var [key, value] of Object.entries(response)) {
+            var displayValue = key === 'llm_analysis' ? md.render(value) : value;
+            tableHtml += `
+                <tr>
+                    <td class="border border-gray-300 p-2">${key}</td>
+                    <td class="border border-gray-300 p-2 overflow-y-auto">${displayValue}</td>
+                </tr>`;
+        }
+
+        tableHtml += `</tbody></table>`;
+        $(elem_name).append(tableHtml);
+    }
     $('#commandForm').on('submit', e => {
         e.preventDefault();
         // for data serialization JSON, and this is understood by pydantic on the other side
@@ -59,9 +82,9 @@ $(document).ready( () => {
             },
             data: JSON.stringify(requestData),
         }).done( response => {
-            $('#result').append('Command Success: ' + JSON.stringify(response));
+            format_json_table(response, "#result")
         }).fail( (xhr, status, error) => {
-            $('#result').append('Command Error: ' + xhr.responseText);
+            $('#result').append('<br>Command Warning: ' + xhr.responseText);
         });
     });
     $('#agentCommandForm').on('submit', e => {
@@ -84,9 +107,9 @@ $(document).ready( () => {
             },
             data: JSON.stringify(requestData),
         }).done( response => {
-            $('#result_agent').append('Command Success: ' + JSON.stringify(response));
+            format_json_table(response, '#result_agent')
         }).fail( (xhr, status, error) => {
-            $('#result_agent').append('Command Error: ' + xhr.responseText);
+            $('#result_agent').append('<br>Command Warning: ' + xhr.responseText);
         });
     });
     $('#runChainForm').on('submit', async e => {
@@ -134,7 +157,9 @@ $(document).ready( () => {
                         if (line.trim()) {
                             try {
                                 const json = JSON.parse(line);
-                                $('#chainOutput').append(`<p>${JSON.stringify(json)}</p>`);
+                                // to support markdown llm 
+                                format_json_table(json, '#chainOutput')
+                                //$('#chainOutput').append(`<p>${JSON.stringify(json)}</p>`);
                             } catch {
                                 console.warn('JSON:', line);
                             }
