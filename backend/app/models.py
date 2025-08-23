@@ -171,7 +171,7 @@ class Agent(Base):
         ForeignKey("attack_step.id", ondelete="CASCADE"),
     )
     agent_name: Mapped[str] = mapped_column(
-        String(256), nullable=False, unique=True
+        String(256), nullable=False, unique=False
     )
     os_type: Mapped[str] = mapped_column(
         String(64), nullable=False, unique=False

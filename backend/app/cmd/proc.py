@@ -127,6 +127,7 @@ async def check_and_process_agent_cmd(
         cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
         callback_display_id=display_id
     )  # by llm cmd based on get_cmd_list...
+    # print('*'*30, result.output, '*'*30, sep="\n") # temp
     llm_analysis = await analyze_command_output_with_llm(
         result.output, cmd
     )

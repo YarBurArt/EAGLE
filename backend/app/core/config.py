@@ -30,6 +30,7 @@ PROJECT_DIR = Path(__file__).parent.parent.parent
 
 # global in app settings without validation
 LOG_LEVEL: str = "INFO"
+DEBUG_MODE_C: bool = False  # CHANGE ME BEFORE RUN
 
 
 class Security(BaseModel):

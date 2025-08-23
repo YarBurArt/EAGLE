@@ -44,7 +44,7 @@ class LocalCommandRequest(BaseRequest):
 class AgentCommandRequest(BaseRequest):
     chain_name: str
     callback_display_id: int
-    command: str
+    command_params: Optional[str] = "uname -a;lscpu;free;df;id;pwd;lsblk"
     tool: Optional[str] = "shell"
 
 
@@ -55,6 +55,7 @@ class ActionApprovalRequest(BaseModel):
     chain_id: int
     phase: str
     type_cmd: str
+    type_tool: str
     target_os_type: str
     approved_by: str
     reason: Optional[str] = ""

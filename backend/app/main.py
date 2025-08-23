@@ -13,15 +13,19 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
-from app.core.config import get_settings
+from app.core.config import get_settings, DEBUG_MODE_C
 
 from app.cmd.c2_tool import init_mythic
+
 
 app = FastAPI(
     title="EAGLE",
     version="0.0.1",
-    description="Emulated Attack Generator w/ Layered Engine"
-                "https://github.com/eogod/EAGLE",
+    description="Emulated Attack Generator w/ Layered Engine <br>"
+                "<a href='https://github.com/eogod/EAGLE'>source</a> "
+                "<a href='/f/index'>GUI</a> <br><br>"
+                "(btw TypeError: NetworkError is just"
+                " a temporary time crutch, just wait a bit more)",
     openapi_url="/openapi.json",
     docs_url="/",
 )
@@ -46,6 +50,24 @@ app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=get_settings().security.allowed_hosts,
 )
+
+
+@app.middleware("http")
+async def log_requests_body(request: Request, call_next):
+    if DEBUG_MODE_C:
+        print("\033[1;33mDEBUG:   Request \033[0m:"
+              f" {request.method} {request.url}")
+        try:
+            body = await request.body()
+            if body:
+                print("\033[1;33mDEBUG:   Request body \033[0m:"
+                      f"{body.decode()}")
+        except Exception:
+            pass
+
+    response = await call_next(request)
+    return response
+
 
 app.mount("/static", StaticFiles(
     directory=Path(__file__).parent.parent.parent / "frontend"

@@ -9,7 +9,7 @@ from typing import List, Tuple, Dict
 from dotenv import load_dotenv
 
 from fastapi import (
-    APIRouter, Depends, HTTPException, status, Request,
+    APIRouter, Depends, HTTPException, status,
     WebSocket, WebSocketDisconnect
 )
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -138,7 +138,7 @@ async def run_local_command(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
         ) from exc
-    # FIXME: for long time response
+    # FIXME: for long time response, bug also in the c2_tool
     return LocalCommandResponse(
         user_id=current_user.user_id,
         chain_name=chain_name,
@@ -169,7 +169,7 @@ async def run_agent_command(
     )
     # FIXME: display_id from rhost Agent
     step, llm_a, c_agent = await check_and_process_agent_cmd(
-        data.callback_display_id, chain_id, data.command,
+        data.callback_display_id, chain_id, data.command_params,
         'agent_' + data.tool, data.tool, phase_name)
     # add attack step with phase
     session.add(step)
@@ -619,10 +619,10 @@ async def approve_action_from_llm(
         result = await process_approved_cmd(
             cmd=action_request.command,
             chain_id=action_request.chain_id,
-            # like local_impacket -> on agent: shell impacket
+            # like custom_c2_pivoting_agent -> on agent: link_tcp ...
             tool_name=f"{
                 action_request.type_cmd
-            }_{action_request.command.split()[0]}",
+            }_{action_request.type_tool}",
             display_id=action_request.agent_id,
             phase_name=action_request.phase,
             p_os_type=action_request.target_os_type
@@ -717,17 +717,3 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
             status_code=500,
             detail=f"Failed to execute approved action: {str(e)}"
         ) from e
-
-
-# @router.add_middleware("http") FIXME: middleware to main
-async def log_requests_body(request: Request, call_next):
-    print(f"query: {request.method} {request.url}")
-    try:
-        body = await request.body()
-        if body:
-            print(f"request body: {body.decode()}")
-    except Exception:
-        pass
-
-    response = await call_next(request)
-    return response
