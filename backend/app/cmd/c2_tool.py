@@ -269,7 +269,7 @@ async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
 
 
 async def execute_local_command(
-    cmd: str, callback_display_id: int, timeout: int = 500
+    cmd: str, callback_display_id: int, timeout: int = 5000
 ) -> AgentCommandOutput:
     """ async function to execute command on zero agent via shell agent
         and timeout, inside, there is a subscription to graphql event
@@ -295,7 +295,7 @@ async def execute_local_command(
 
 
 async def execute_agent_command_o(
-    cmd: str, params: str, callback_display_id: int, timeout=300
+    cmd: str, params: str, callback_display_id: int, timeout=3000
 ) -> AgentCommandOutput:
     """ execute cmd with params on remote agent """
     output = await mythic.issue_task_and_waitfor_task_output(

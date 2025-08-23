@@ -5,7 +5,11 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 import time
 import json
 import hashlib
-from typing import Tuple
+from typing import Tuple, List, Optional
+from pydantic import BaseModel
+
+from fastapi import HTTPException, status
+
 from app.core.llm_templ import LLMTemplates
 from app.cmd.c2_tool import (
     execute_local_command, check_status, AgentCommandOutput,
@@ -19,8 +23,6 @@ from app.cmd.llm_analysis import llm_service
 from app.core.config import (
     phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
 )
-from pydantic import BaseModel
-from typing import List, Optional
 
 
 class ActionSuggestionsResponse(BaseModel):
@@ -123,11 +125,18 @@ async def check_and_process_agent_cmd(
 ) -> Tuple[AttackStep, str]:
     """ run commands on agent and return output based on tool """
     assert cmd not in UNSAFE_CMD
-    result = await execute_agent_command_o(
-        cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
-        callback_display_id=display_id
-    )  # by llm cmd based on get_cmd_list...
-    # print('*'*30, result.output, '*'*30, sep="\n") # temp
+    try:
+        result = await execute_agent_command_o(
+            cmd=tool_n, params=cmd,  # basicly in local_cmd is also params
+            callback_display_id=display_id
+        )  # by llm cmd based on get_cmd_list...
+    except Exception as e:  # general exception cuz mythic lib
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="The command was aborted by C2, the step/agent not saved,"
+                   " but you can bypass this issue using agent commands"
+                   " and shell scripts for long time tasks."
+        ) from e
     llm_analysis = await analyze_command_output_with_llm(
         result.output, cmd
     )
@@ -193,11 +202,18 @@ async def check_and_process_local_cmd(
     #    cmd, phase_name, "poseidon", "Linux"  # for agents get from d_id
     # )
     # assert is_allowed_cmd, f"Command not allowed in phase {phase_name}"
-
-    # send command to C2
-    ex_result: AgentCommandOutput = await execute_local_command(
-        cmd, c_display_id
-    )
+    try:
+        # send command to C2
+        ex_result: AgentCommandOutput = await execute_local_command(
+            cmd, c_display_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="The command was aborted by C2, the step was not saved,"
+                   " but you can bypass this issue using bash scripts"
+                   " for long time tasks."
+        ) from e
     # Отправляем вывод команды в LLM для анализа
     llm_analysis = await analyze_command_output_with_llm(
         ex_result.output, cmd
