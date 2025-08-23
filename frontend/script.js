@@ -49,7 +49,6 @@ $(document).ready( () => {
             command: $('#command').val(),
             callback_display_id: $('#callbackDisplayId').val()
         };
-
         $.ajax({
             url: `${baseURL}/cmd/run-command`, 
             type: 'POST',
@@ -60,9 +59,9 @@ $(document).ready( () => {
             },
             data: JSON.stringify(requestData),
         }).done( response => {
-            $('#result').html('Command Success: ' + JSON.stringify(response));
+            $('#result').append('Command Success: ' + JSON.stringify(response));
         }).fail( (xhr, status, error) => {
-            $('#result').html('Command Error: ' + xhr.responseText);
+            $('#result').append('Command Error: ' + xhr.responseText);
         });
     });
     $('#agentCommandForm').on('submit', e => {
@@ -70,7 +69,7 @@ $(document).ready( () => {
 
         var requestData = {
             chain_name: $('#chainName').val(),
-            command: $('#command').val(),
+            command: $('#command_agent').val(),
             tool: $('#tool').val(),  
             callback_display_id: $('#callbackDisplayId').val()
         };
@@ -85,9 +84,9 @@ $(document).ready( () => {
             },
             data: JSON.stringify(requestData),
         }).done( response => {
-            $('#result').html('Command Success: ' + JSON.stringify(response));
+            $('#result_agent').append('Command Success: ' + JSON.stringify(response));
         }).fail( (xhr, status, error) => {
-            $('#result').html('Command Error: ' + xhr.responseText);
+            $('#result_agent').append('Command Error: ' + xhr.responseText);
         });
     });
     $('#runChainForm').on('submit', async e => {
@@ -95,7 +94,7 @@ $(document).ready( () => {
         var chainId = $('#chainId').val();
         var zeroDisplayId = $('#zeroDisplayId').val();
 
-        $('#result').html('Run chain ...');
+        $('#result').append('Run chain ...');
         $('#chainOutput').empty();
 
         try {
@@ -144,12 +143,12 @@ $(document).ready( () => {
                 }
             }
 
-            $('#result').html('Chain is done');
+            $('#chainOutput').append('Chain is done');
         } catch (err) {
             if (err.name === 'AbortError') {
-                $('#result').html('timeout, check server');
+                $('#result').append('timeout, check server');
             } else {
-                $('#result').html('Error run chain: ' + err.message);
+                $('#result').append('Error run chain: ' + err.message);
             }
         }
 
@@ -214,9 +213,4 @@ $(document).ready( () => {
             $('#result').html('No active chain at now');
         }
     });
-
-    chainWebSocket.onclose = () => {
-        console.log('WebSocket closed');
-        $('#result').append('<p>WebSocket closed</p>');
-    };
 });
