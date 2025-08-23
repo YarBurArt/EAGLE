@@ -70,6 +70,12 @@ poetry install
 # or on debian / parrot
 python3.13 -m poetry install
 ```
+If it throws an error (like on the kali 2023-2024), then it might help:
+```bash
+python3 -m venv env
+source env/source/activated
+# then the same as above
+```
 Setup database and migrations 
 ```bash
 # Setup database
