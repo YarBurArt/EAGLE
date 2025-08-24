@@ -27,7 +27,7 @@ class LLMService:
             "you": g4f.Provider.You,
         }
 
-    async def query_llm(self, prompt: str, provider_name: str) -> str:
+    async def query_llm(self, prompt: str, provider_name: str = None) -> str:
         """
         Отправляет запрос к бесплатным LLM через g4f
         """
@@ -53,7 +53,7 @@ class LLMService:
         parts_th = res.response.rsplit('</think>', 1)
         return parts_th[-1] if len(parts_th) > 1 else res.response
 
-    async def _g4f_llm(self, prompt: str, provider_name: str = None) -> str:
+    async def _g4f_llm(self, prompt: str, provider_name: str) -> str:
         """ query with g4f proxy providers like DDG """
         # Если указан провайдер, используем его
         if provider_name and provider_name in self.providers:
