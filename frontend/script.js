@@ -92,7 +92,7 @@ $(document).ready( () => {
 
         var requestData = {
             chain_name: $('#chainName').val(),
-            command: $('#command_agent').val(),
+            command_params: $('#command_agent').val(),
             tool: $('#tool').val(),  
             callback_display_id: $('#callbackDisplayId').val()
         };
