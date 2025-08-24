@@ -22,6 +22,7 @@ gql = "^3.5.3"
 dotenv = "^0.9.9"
 autopep8 = "^2.3.2"
 g4f = "^0.5.8.1"
+ollama = "^0.5.3"
 
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.9.1"

@@ -56,13 +56,16 @@ MYTHIC__SERVER_PORT=7443
 MYTHIC__TIMEOUT=-1
 MYTHIC__PAYLOAD_PORT_HTTP=1337
 ```
-If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also 
+If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also this. We recommend these models [Mistral](https://ollama.com/library/mistral), [Qwen3-ab](https://ollama.com/jaahas/qwen3-abliterated) , [llama3.1:8b](https://ollama.com/library/llama3.1), [llama3.1-ab:8b](https://ollama.com/mannix/llama3.1-8b-abliterated) (more freely), [Qwen2.5-coder:32b](https://ollama.com/library/qwen2.5-coder)  which depends on your resources.
 ```env
+LLMSERVICE__LOCAL=TRUE
 LLMSERVICE__API_URL=http://localhost:69228
 LLMSERVICE__API_KEY=super_secret_key
 LLMSERVICE__TIMEOUT=120
 LLMSERVICE__DEFAULT_MODEL=mistral
 ```
+Otherwise, the values will be taken from the [config](https://github.com/eogod/EAGLE/blob/main/backend/app/core/config.py), and you can see the validation there.
+
 Install dependencies
 ```bash
 # Poetry install (python3.13)
