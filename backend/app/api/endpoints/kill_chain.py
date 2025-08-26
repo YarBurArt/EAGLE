@@ -62,10 +62,13 @@ def result_to_dict_recursive(
             # process related objects
             if related_obj is not None:
                 if rel.uselist:
+                    # try to sort by id dict attr
+                    related_list = list(related_obj)
+                    related_list.sort(key=lambda x: getattr(x, "id", None))
                     # recursive as list Result from generator
                     data[rel.key] = [
                         result_to_dict_recursive(child, visited.copy())
-                        for child in related_obj
+                        for child in related_list
                     ]
                 else:
                     data[rel.key] = result_to_dict_recursive(
@@ -114,6 +117,7 @@ async def export_json(
     chain_name: str = chain_c.chain_name
     if is_with_llm:
         data_s = json.dumps(data, ensure_ascii=False, indent=4)
+        # TODO: add filter for llm in
         llm_a: str = await llm_service.query_llm(
             LLMTemplates.CHAIN_SUMMARIZATION.format(data=data_s)
         )

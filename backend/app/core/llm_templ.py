@@ -30,6 +30,10 @@ Each field should be an array of command strings.
         You possess in-depth knowledge of the various phases
         of the kill chain attack model and its extended version.
         Provide concise, actionable suggestions.
+        When you come across interesting or sensitive data,
+        mark it without fully redacting it,
+        your goal is also work through any gibberish
+        to uncover useful details.
         All responses must be in valid JSON format.
         """
     CHAIN_SUMMARIZATION = """
@@ -53,3 +57,13 @@ Each field should be an array of command strings.
         potential blind spots in current defensive architectures.
     JSON input: {data}
     """
+    SUGGEST_ACTION_CMD = """User described the task:{p_command}
+    Return JSON with the following fields:
+    - command (str) — main command text (optional in the schema response,
+    but LLM must generate it for subsequent processing),
+    - type_cmd (str|null) only in [local, agent, custom, payload, getcallback],
+    - type_tool (str|null) like ls, id, impacket, nmap,
+    - command (str) like nmap 10.0.0.1,
+    - phase (str|null),
+    - target_os_type (str|null).
+    Respond ONLY with a JSON object."""
