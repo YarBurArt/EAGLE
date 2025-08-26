@@ -60,10 +60,10 @@ Each field should be an array of command strings.
     SUGGEST_ACTION_CMD = """User described the task:{p_command}
     Return JSON with the following fields:
     - command (str) — main command text (optional in the schema response,
-    but LLM must generate it for subsequent processing),
-    - type_cmd (str|null) only in [local, agent, custom, payload, getcallback],
+    but LLM must generate it for subsequent processing) like nmap 10.0.0.1 ...,
+    - type_cmd (str|null) only in [local, agent, custom, payload, getcallback]
+    but any CLI or console or shell command is local or agent shell,
     - type_tool (str|null) like ls, id, impacket, nmap,
-    - command (str) like nmap 10.0.0.1,
-    - phase (str|null),
+    - phase (str|null) in kill chain (extended virsion UKC),
     - target_os_type (str|null).
     Respond ONLY with a JSON object."""

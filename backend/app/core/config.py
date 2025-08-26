@@ -63,7 +63,7 @@ class Mythic(BaseModel):
 
 class LLMservice(BaseModel):
     """ env format like LLMSERVICE__API_URL=http... """
-    local: bool = False
+    local: int = 0
     api_url: HttpUrl = "http://localhost:69228"  # Для локального Ollama
     api_key: str = None
     timeout: int = 120

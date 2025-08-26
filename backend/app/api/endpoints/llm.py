@@ -14,7 +14,10 @@ import g4f  # temp
 from app.cmd.llm_analysis import llm_service
 from app.core.llm_templ import LLMTemplates
 from app.schemas.requests import (
-    QueryRequest, CodeAnalysisRequest, PayloadRequest
+    QueryRequest, CodeAnalysisRequest, PayloadRequest, SuggestActionRequest
+)
+from app.schemas.responses import (
+    SuggestActionResponse,
 )
 
 router = APIRouter()
@@ -80,6 +83,33 @@ async def generate_payload(request: PayloadRequest):
             status_code=500,
             detail=f"generation error: {str(e)}"
         ) from e
+
+
+@router.post("/suggest-action", response_model=SuggestActionResponse)
+async def suggest_action_from_llm(req: SuggestActionRequest):
+    """ suggest action for approve based on process_approved_cmd
+        then user fix and send to cmd approve by hand """
+    # TODO: get last step info by session, chain id
+    prompt = LLMTemplates.SUGGEST_ACTION_CMD.format(p_command=req.p_command)
+    llm_raw: str = await llm_service.query_llm(prompt)
+
+    try:
+        llm_json = json.loads(llm_raw)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM returned invalid JSON: {str(exc)} — raw: {llm_raw}"
+        ) from exc
+
+    return SuggestActionResponse(
+        chain_id=req.chain_id,
+        agent_id=req.display_id,
+        command=llm_json.get("command"),
+        phase=llm_json.get("phase"),
+        target_os_type=llm_json.get("target_os_type"),
+        type_cmd=llm_json.get("type_cmd"),
+        type_tool=llm_json.get("type_tool"),
+    )
 
 
 @router.post("/analyze/code", description="Analyze and explain code via LLM")

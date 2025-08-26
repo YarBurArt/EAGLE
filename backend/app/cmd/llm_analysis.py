@@ -12,8 +12,8 @@ from app.core.llm_templ import LLMTemplates
 g4f.debug.logging = True
 
 load_dotenv()
-IS_LOCAL_LLM: bool = os.getenv('LLMSERVICE__LOCAL')
-if IS_LOCAL_LLM:
+IS_LOCAL_LLM: int = os.getenv('LLMSERVICE__LOCAL')
+if IS_LOCAL_LLM == 1:
     client_ollama = Client(host=os.getenv('LLMSERVICE__API_URL'))
 else:
     client_ollama = None
@@ -33,7 +33,7 @@ class LLMService:
         """
         # TODO: support custom system prompt
         try:
-            if IS_LOCAL_LLM:
+            if IS_LOCAL_LLM == 1:
                 res: str = self._local_llm(prompt)
             else:
                 res: str = await self._g4f_llm(prompt, provider_name)

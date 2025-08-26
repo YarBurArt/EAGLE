@@ -88,3 +88,14 @@ class NewPayloadResponse(BaseResponse):
     download_url: str
     raw_log: Optional[str]
     llm_analysis: str
+
+
+# almost full from LLM
+class SuggestActionResponse(BaseResponse):
+    chain_id: Optional[int] = 0
+    agent_id: Optional[int] = 0
+    command: Optional[str] = "whoami"
+    phase: Optional[str] = "Reconnaissance"
+    target_os_type: Optional[str] = None
+    type_cmd: Optional[str] = None
+    type_tool: Optional[str] = "whoami"

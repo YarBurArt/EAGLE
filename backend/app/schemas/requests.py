@@ -83,3 +83,9 @@ class CodeAnalysisRequest(BaseModel):
 class PayloadRequest(BaseModel):
     description: str
     language: Optional[str] = "python"
+
+
+class SuggestActionRequest(BaseRequest):
+    p_command: Optional[str] = "get system info"  # | None
+    chain_id: int
+    display_id: int
