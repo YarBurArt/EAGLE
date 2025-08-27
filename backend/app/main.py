@@ -5,7 +5,7 @@ security middleware layers, and Swagger parameters
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+# from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
-from app.core.config import get_settings, DEBUG_MODE_C
+from app.core.config import DEBUG_MODE_C  # , get_settings,
 
 from app.cmd.c2_tool import init_mythic
 
@@ -37,8 +37,9 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        str(origin).rstrip("/")
-        for origin in get_settings().security.backend_cors_origins
+        "0.0.0.0"  # DEBUG, CHANGE ME BEFORE RUN
+        #    str(origin).rstrip("/")
+        #    for origin in get_settings().security.backend_cors_origins
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -46,10 +47,9 @@ app.add_middleware(
 )
 
 # Guards against HTTP Host Header attacks
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=get_settings().security.allowed_hosts,
-)
+# app.add_middleware(
+#    TrustedHostMiddleware,
+#    allowed_hosts=get_settings().security.allowed_hosts,)
 
 
 @app.middleware("http")

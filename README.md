@@ -93,7 +93,8 @@ Run backend FastAPI
 ```bash
 python3.13 -m poetry shell  # if you exited
 
-uvicorn app.main:app --reload
+# not secure but for tests 
+uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000
 ```
 
 ## Usage
@@ -113,6 +114,8 @@ Currently, if a command not execute, it will not be saved to the database but LL
 The first commands are often Reconnaissance and run locally, so you need `Zero agent` and its `display_id`,
 which you include in requests to **/cmd/run-command**.
 If you may have made a mistake and any command was somewhy saved to the DB, you can reject the last saved command in the chain and delete it via **/cmd/reject-s/{chain_name}**
+
+You can briefly describe the task and generate the EAGLE command via `LLM` via POST **/llm/suggest-action** , then correct and finalize it if necessary and apply it via POST **/cmd/approve-action** specifying some service data as agent_id (same as display id) . When making an suggestion, the `AI` considers the current phase of the kill chain, the values of the most recent commands/steps (like status and output), the current chain, and then attempts to suggest potentially effective attack vectors and command, target os.
 
 For agent-specific commands, use **/cmd/run-agent-command**, also specifying the agent utility name, for local it's set as `shell`.
 Commands executed this way are immediately saved to the chain, 

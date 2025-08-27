@@ -86,6 +86,6 @@ class PayloadRequest(BaseModel):
 
 
 class SuggestActionRequest(BaseRequest):
-    p_command: Optional[str] = "get system info"  # | None
+    p_command: Optional[str] = "just analyze last steps and tell me what to do next"  # | None
     chain_id: int
     display_id: int

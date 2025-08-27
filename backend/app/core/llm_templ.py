@@ -57,13 +57,23 @@ Each field should be an array of command strings.
         potential blind spots in current defensive architectures.
     JSON input: {data}
     """
-    SUGGEST_ACTION_CMD = """User described the task:{p_command}
+    SUGGEST_ACTION_CMD = """
+    User described the task: {p_command} ;
+    The current chain, current Kill chain phase
+    and last audit command is: {step} ;
+    You must suggest next command based on last result/command/status/phase
+    or with (as is) user described. You must consider the current attack phase.
+    Commands can be more complex than the previous ones, and you may need
+    to maximize the effectiveness of the command through flags and parameters.
+    We need the most interesting ways of exploitation kill chain
+    like for both RCE and LPE and even more.
     Return JSON with the following fields:
     - command (str) — main command text (optional in the schema response,
-    but LLM must generate it for subsequent processing) like nmap 10.0.0.1 ...,
+    but LLM must generate it for subsequent processing) based on last,
     - type_cmd (str|null) only in [local, agent, custom, payload, getcallback]
     but any CLI or console or shell command is local or agent shell,
     - type_tool (str|null) like ls, id, impacket, nmap,
     - phase (str|null) in kill chain (extended virsion UKC),
     - target_os_type (str|null).
-    Respond ONLY with a JSON object."""
+    Respond ONLY with a JSON object.
+    No need to wrap in ``json, your entire response should be JSON already"""

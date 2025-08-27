@@ -4,10 +4,15 @@ to simplify the creation of a chain relative to the user
 idk what is g4f.gui.run_gui()
 """
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from fastapi import (
-    APIRouter, HTTPException
+    APIRouter, HTTPException, Depends
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, desc
+from app.models import (
+    User, AttackChain, AttackStep, CurrentAttackPhase,
 )
 import g4f  # temp
 
@@ -16,6 +21,7 @@ from app.core.llm_templ import LLMTemplates
 from app.schemas.requests import (
     QueryRequest, CodeAnalysisRequest, PayloadRequest, SuggestActionRequest
 )
+from app.api import deps
 from app.schemas.responses import (
     SuggestActionResponse,
 )
@@ -86,11 +92,56 @@ async def generate_payload(request: PayloadRequest):
 
 
 @router.post("/suggest-action", response_model=SuggestActionResponse)
-async def suggest_action_from_llm(req: SuggestActionRequest):
+async def suggest_action_from_llm(
+    req: SuggestActionRequest,
+    session: AsyncSession = Depends(deps.get_session),
+    current_user: User = Depends(deps.get_current_user)
+):
     """ suggest action for approve based on process_approved_cmd
         then user fix and send to cmd approve by hand """
-    # TODO: get last step info by session, chain id
-    prompt = LLMTemplates.SUGGEST_ACTION_CMD.format(p_command=req.p_command)
+    chain_ca_list: List[AttackChain] = await session.execute(
+        select(AttackChain).where(
+            AttackChain.id == req.chain_id,
+        )
+    )
+    chain_ca: AttackChain = chain_ca_list.scalars().first()
+    await session.commit()
+    chain_c_phase_list: List[CurrentAttackPhase] = await session.execute(
+        select(CurrentAttackPhase).where(
+            CurrentAttackPhase.chain_id == chain_ca.id
+        )
+    )
+    chain_c_phase = chain_c_phase_list.scalars().first()
+    current_phase_n = chain_c_phase.phase or "Reconnaissance"
+    res_l_step = await session.execute(
+        select(AttackStep).where(
+            AttackStep.chain_id == req.chain_id
+        ).order_by(desc(AttackStep.update_time)).limit(3)
+    )
+    last_attack_steps = [
+        {
+            "id": step.id,
+            "phase": step.phase,
+            "tool_name": step.tool_name,
+            "command": step.command,
+            "raw_log": step.raw_log,
+            "status": step.status,
+        }
+        for step in res_l_step.scalars().all()
+    ]
+    pre_dict = {
+        "chain_id": chain_ca.id,
+        "user_id": chain_ca.user_id,
+        "chain_name": chain_ca.chain_name,
+        "user_email": current_user.email,
+        "final_status": chain_ca.final_status,
+        "current_phase_name": current_phase_n,
+        "last_attack_step": last_attack_steps or "no last step"
+    }
+    st: str = json.dumps(pre_dict, indent=2)
+    prompt = LLMTemplates.SUGGEST_ACTION_CMD.format(
+        p_command=req.p_command, step=st
+    )
     llm_raw: str = await llm_service.query_llm(prompt)
 
     try:
