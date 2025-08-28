@@ -1,5 +1,7 @@
 # EAGLE - Emulated Attack Generator w/ Layered Engine
 
+[Russian version](https://github.com/eogod/EAGLE/blob/main/docs/README-ru.md)
+
 The Emulated Attack Generator with Layered Engine is an interactive system for building
 and executing realistic attack chains based on the [Unified Cyber Kill Chain](https://www.unifiedkillchain.com/) stages and supports the dynamic formation of attack chains in real
 time. It works in the context of an API that uses GraphQL and the Mythics library plus a minimal frontend.
