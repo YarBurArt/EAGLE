@@ -50,6 +50,7 @@ class AgentCommandRequest(BaseRequest):
 
 class ActionApprovalRequest(BaseModel):
     """Модель запроса для одобрения действий"""
+
     command: str
     agent_id: int
     chain_id: int
@@ -63,6 +64,7 @@ class ActionApprovalRequest(BaseModel):
 
 class ActionExecutionRequest(BaseModel):
     """Модель запроса для выполнения одобренных действий"""
+
     command: str
     agent_display_id: int
     chain_id: int

@@ -1,6 +1,7 @@
 """
 Module for test the correct operation of password hashing
 """
+
 from app.core.security.password import get_password_hash, verify_password
 
 

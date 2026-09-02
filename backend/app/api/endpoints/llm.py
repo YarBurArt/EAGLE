@@ -2,6 +2,7 @@
 Module only for llm endpoints
 to simplify the creation of a chain relative to the user
 """
+
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -36,11 +37,7 @@ async def llm_query(request: QueryRequest):
     """
     try:
         result = await llm_service.query_llm(request.prompt, request.provider)
-        return {
-            "success": True,
-            "response": result,
-            "prompt": request.prompt
-        }
+        return {"success": True, "response": result, "prompt": request.prompt}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -53,15 +50,13 @@ async def generate_payload(request: PayloadRequest):
     try:
         # Используем шаблон из конфигурации
         prompt = LLMTemplates.PAYLOAD_GENERATION.format(
-            language=request.language,
-            description=request.description
+            language=request.language, description=request.description
         )
         result = await llm_service.query_llm(prompt)
 
         # Используем шаблон для генерации команд
         commands_prompt = LLMTemplates.COMMANDS_GENERATION.format(
-            language=request.language,
-            script=result
+            language=request.language, script=result
         )
 
         commands_result = await llm_service.query_llm(commands_prompt)
@@ -74,7 +69,7 @@ async def generate_payload(request: PayloadRequest):
                 "setup_commands": [],
                 "execution_commands": [],
                 "verification_commands": [],
-                "cleanup_commands": []
+                "cleanup_commands": [],
             }
 
         return {
@@ -82,12 +77,11 @@ async def generate_payload(request: PayloadRequest):
             "payload": result,
             "commands": commands_data,
             "language": request.language,
-            "description": request.description
+            "description": request.description,
         }
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"generation error: {str(e)}"
+            status_code=500, detail=f"generation error: {str(e)}"
         ) from e
 
 
@@ -95,10 +89,10 @@ async def generate_payload(request: PayloadRequest):
 async def suggest_action_from_llm(
     req: SuggestActionRequest,
     session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
 ):
-    """ suggest action for approve based on process_approved_cmd
-        then user fix and send to cmd approve by hand """
+    """suggest action for approve based on process_approved_cmd
+    then user fix and send to cmd approve by hand"""
     chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == req.chain_id,
@@ -107,16 +101,15 @@ async def suggest_action_from_llm(
     chain_ca: AttackChain = chain_ca_list.scalars().first()
     await session.commit()
     chain_c_phase_list: list[CurrentAttackPhase] = await session.execute(
-        select(CurrentAttackPhase).where(
-            CurrentAttackPhase.chain_id == chain_ca.id
-        )
+        select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_ca.id)
     )
     chain_c_phase = chain_c_phase_list.scalars().first()
     current_phase_n = chain_c_phase.phase or "Reconnaissance"
     res_l_step = await session.execute(
-        select(AttackStep).where(
-            AttackStep.chain_id == req.chain_id
-        ).order_by(desc(AttackStep.update_time)).limit(3)
+        select(AttackStep)
+        .where(AttackStep.chain_id == req.chain_id)
+        .order_by(desc(AttackStep.update_time))
+        .limit(3)
     )
     last_attack_steps = [
         {
@@ -136,12 +129,10 @@ async def suggest_action_from_llm(
         "user_email": current_user.email,
         "final_status": chain_ca.final_status,
         "current_phase_name": current_phase_n,
-        "last_attack_step": last_attack_steps or "no last step"
+        "last_attack_step": last_attack_steps or "no last step",
     }
     st: str = json.dumps(pre_dict, indent=2)
-    prompt = LLMTemplates.SUGGEST_ACTION_CMD.format(
-        p_command=req.p_command, step=st
-    )
+    prompt = LLMTemplates.SUGGEST_ACTION_CMD.format(p_command=req.p_command, step=st)
     llm_raw: str = await llm_service.query_llm(prompt)
 
     try:
@@ -149,7 +140,7 @@ async def suggest_action_from_llm(
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"LLM returned invalid JSON: {str(exc)} — raw: {llm_raw}"
+            detail=f"LLM returned invalid JSON: {str(exc)} — raw: {llm_raw}",
         ) from exc
 
     return SuggestActionResponse(
@@ -171,11 +162,7 @@ async def analyze_code(request: CodeAnalysisRequest):
     try:
         prompt = f"analyze this code and explain it to me\n\n{request.code}"
         result = await llm_service.query_llm(prompt)
-        return {
-            "success": True,
-            "analysis": result,
-            "code": request.code
-        }
+        return {"success": True, "analysis": result, "code": request.code}
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"error code analysis {str(e)}"
@@ -190,18 +177,11 @@ async def get_providers():
     try:
         providers_list = []
         for name, provider in llm_service.providers.items():
-            providers_list.append({
-                "name": name,
-                "class": provider.__name__
-            })
-        return {
-            "success": True,
-            "providers": providers_list
-        }
+            providers_list.append({"name": name, "class": provider.__name__})
+        return {"success": True, "providers": providers_list}
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"error retrieving provider: {str(e)}"
+            status_code=500, detail=f"error retrieving provider: {str(e)}"
         ) from e
 
 
@@ -211,13 +191,9 @@ async def chat_conversation(req: ChatRequest):
     Эндпоинт для ведения диалога
     """
     if not req.messages:
-        raise HTTPException(
-            status_code=400, detail="messages list is required"
-        )
+        raise HTTPException(status_code=400, detail="messages list is required")
 
-    result = await llm_service.query_llm_chat(
-        req.messages, req.provider
-    )
+    result = await llm_service.query_llm_chat(req.messages, req.provider)
     return {
         "success": True,
         "response": result,

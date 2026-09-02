@@ -1,6 +1,7 @@
 """
 Module for test jwt access token scenarios, their correct http response
 """
+
 import pytest
 from fastapi import status
 from freezegun import freeze_time
@@ -72,7 +73,9 @@ async def test_login_access_token_jwt_has_valid_expire_time(
 
     assert check_token_expire_time(
         response.json(),
-        get_settings().security.jwt_access_token_expire_secs, "expires_at")
+        get_settings().security.jwt_access_token_expire_secs,
+        "expires_at",
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -110,7 +113,8 @@ async def test_login_access_token_refresh_token_has_valid_expire_time(
     assert check_token_expire_time(
         response.json(),
         get_settings().security.refresh_token_expire_secs,
-        "refresh_token_expires_at")
+        "refresh_token_expires_at",
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -149,8 +153,7 @@ async def test_login_access_token_refresh_token_in_db_has_valid_fields(
 
     token = response.json()
     result = await session.scalars(
-        select(RefreshToken).where(
-            RefreshToken.refresh_token == token["refresh_token"])
+        select(RefreshToken).where(RefreshToken.refresh_token == token["refresh_token"])
     )
     refresh_token = result.one()
 

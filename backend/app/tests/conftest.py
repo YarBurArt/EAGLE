@@ -1,6 +1,7 @@
 """
 Module for defining basic test fixtures
 """
+
 import logging
 import os
 from collections.abc import AsyncGenerator
@@ -29,16 +30,14 @@ default_user_access_token = create_jwt_token(default_user_id).access_token
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def fixture_setup_new_test_database() -> None:
-    """ create new db for tests, setup as fixture session """
+    """create new db for tests, setup as fixture session"""
     worker_name = os.getenv("PYTEST_XDIST_WORKER", "gw0")
     test_db_name = f"test_db_{worker_name}"
 
     # create new test db using connection to current database
     conn = await database_session._ASYNC_ENGINE.connect()
     await conn.execution_options(isolation_level="AUTOCOMMIT")
-    await conn.execute(
-        sqlalchemy.text(f"DROP DATABASE IF EXISTS {test_db_name}")
-        )
+    await conn.execute(sqlalchemy.text(f"DROP DATABASE IF EXISTS {test_db_name}"))
     await conn.execute(sqlalchemy.text(f"CREATE DATABASE {test_db_name}"))
     await conn.close()
 
@@ -50,8 +49,7 @@ async def fixture_setup_new_test_database() -> None:
     get_settings.cache_clear()
 
     # monkeypatch test database engine
-    engine = database_session.new_async_engine(
-        get_settings().sqlalchemy_database_uri)
+    engine = database_session.new_async_engine(get_settings().sqlalchemy_database_uri)
 
     session_mpatch.setattr(
         database_session,
@@ -71,7 +69,7 @@ async def fixture_setup_new_test_database() -> None:
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def fixture_clean_get_settings_between_tests() -> AsyncGenerator[None]:
-    """ prevents test cache interference -> more stable tests """
+    """prevents test cache interference -> more stable tests"""
     yield
 
     get_settings.cache_clear()
@@ -79,7 +77,7 @@ async def fixture_clean_get_settings_between_tests() -> AsyncGenerator[None]:
 
 @pytest_asyncio.fixture(name="default_hashed_password", scope="session")
 async def fixture_default_hashed_password() -> str:
-    """ default password stub """
+    """default password stub"""
     return get_password_hash(default_user_password)
 
 
@@ -87,7 +85,7 @@ async def fixture_default_hashed_password() -> str:
 async def fixture_session_with_rollback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncGenerator[AsyncSession]:
-    """ to rollback db commits after each test function """
+    """to rollback db commits after each test function"""
     # we want to monkeypatch get_async_session with one bound to session
     # that we will always rollback on function scope
 
@@ -112,7 +110,7 @@ async def fixture_session_with_rollback(
 
 @pytest_asyncio.fixture(name="client", scope="function")
 async def fixture_client(session: AsyncSession) -> AsyncGenerator[AsyncClient]:
-    """ setup http api client """
+    """setup http api client"""
     asgit = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=asgit, base_url="http://test") as aclient:
         aclient.headers.update({"Host": "localhost"})
@@ -123,7 +121,7 @@ async def fixture_client(session: AsyncSession) -> AsyncGenerator[AsyncClient]:
 async def fixture_default_user(
     session: AsyncSession, default_hashed_password: str
 ) -> AsyncGenerator[User]:
-    """ create new user for tests as default_user """
+    """create new user for tests as default_user"""
     default_user = User(
         user_id=default_user_id,
         email=default_user_email,
@@ -139,5 +137,5 @@ async def fixture_default_user(
 
 @pytest_asyncio.fixture(name="default_user_headers", scope="function")
 async def fixture_default_user_headers(default_user: User) -> dict[str, str]:
-    """ for all client requests set auth header with token """
+    """for all client requests set auth header with token"""
     return {"Authorization": f"Bearer {default_user_access_token}"}

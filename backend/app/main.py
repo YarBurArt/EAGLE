@@ -2,6 +2,8 @@
 Main module responsible for the upper-level API design,
 security middleware layers, and Swagger parameters
 """
+
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,19 +15,41 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
-from app.cmd.c2_tool import init_mythic
+from app.api.deps import ChainController
+from app.cmd.c2_tool import MythicClient
 from app.core.config import DEBUG_MODE_C  # , get_settings,
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """create and manage services for C2"""
+    mythic_client = MythicClient()
+    try:
+        await mythic_client.connect()
+    except Exception as e:
+        print(
+            "\033[1;33mWARNING:   \033[0mok, you can test some without mythic because",
+            e,
+        )
+    app.state.mythic_client = mythic_client
+    app.state.chain_controller = ChainController()
+
+    yield
+
+    await mythic_client.disconnect()
+
 
 app = FastAPI(
     title="EAGLE",
     version="0.0.1",
     description="Emulated Attack Generator w/ Layered Engine <br>"
-                "<a href='https://github.com/eogod/EAGLE'>source</a> "
-                "<a href='/f/index'>GUI</a> <br><br>"
-                "(btw TypeError: NetworkError is just"
-                " a temporary time crutch, just wait a bit more)",
+    "<a href='https://github.com/eogod/EAGLE'>source</a> "
+    "<a href='/f/index'>GUI</a> <br><br>"
+    "(btw TypeError: NetworkError is just"
+    " a temporary time crutch, just wait a bit more)",
     openapi_url="/openapi.json",
     docs_url="/",
+    lifespan=lifespan,
 )
 
 app.include_router(auth_router)
@@ -53,13 +77,11 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests_body(request: Request, call_next):
     if DEBUG_MODE_C:
-        print("\033[1;33mDEBUG:   Request \033[0m:"
-              f" {request.method} {request.url}")
+        print(f"\033[1;33mDEBUG:   Request \033[0m: {request.method} {request.url}")
         try:
             body = await request.body()
             if body:
-                print("\033[1;33mDEBUG:   Request body \033[0m:"
-                      f"{body.decode()}")
+                print(f"\033[1;33mDEBUG:   Request body \033[0m:{body.decode()}")
         except Exception:
             pass
 
@@ -67,34 +89,20 @@ async def log_requests_body(request: Request, call_next):
     return response
 
 
-app.mount("/static", StaticFiles(
-    directory=Path(__file__).parent.parent.parent / "frontend"
-    ), name="static")
-
-
-@app.on_event("startup")
-async def on_startup():
-    """ init steps for any chain """
-    try:
-        await init_mythic()
-    except Exception as e:
-        print("\033[1;33mWARNING:   \033[0m"
-              "ok, you can test some without mythic because", e)
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent.parent.parent / "frontend"),
+    name="static",
+)
 
 
 @app.exception_handler(AssertionError)
 async def assertion_exception_handler(request: Request, exc: AssertionError):
-    """ we dont need 500 at bad input """
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)}
-    )
+    """we don't need 500 at bad input"""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):
-    """ we dont need 500 at bad value inside """
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)}
-    )
+    """we don't need 500 at bad value inside"""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})

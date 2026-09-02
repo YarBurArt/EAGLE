@@ -1,4 +1,5 @@
-""" Module for interactions with the user's account """
+"""Module for interactions with the user's account"""
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ router = APIRouter()
 async def read_current_user(
     current_user: User = Depends(deps.get_current_user),
 ) -> User:
-    """ get information about user by jwt """
+    """get information about user by jwt"""
     return current_user
 
 
@@ -29,7 +30,7 @@ async def delete_current_user(
     current_user: User = Depends(deps.get_current_user),
     session: AsyncSession = Depends(deps.get_session),
 ) -> None:
-    """ delete user by id """
+    """delete user by id"""
     query = delete(User).where(User.user_id == current_user.user_id)
     await session.execute(query)
     await session.commit()
@@ -45,8 +46,7 @@ async def reset_current_user_password(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> None:
-    """ update password by plain new password and jwt """
-    current_user.hashed_password = get_password_hash(
-        user_update_password.password)
+    """update password by plain new password and jwt"""
+    current_user.hashed_password = get_password_hash(user_update_password.password)
     session.add(current_user)
     await session.commit()

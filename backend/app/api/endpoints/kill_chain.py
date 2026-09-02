@@ -1,5 +1,6 @@
-""" Module for export chain in json / yaml by file stream
-    with LLM summarization of whole chain """
+"""Module for export chain in JSON / YAML by file stream
+with LLM summarization of whole chain"""
+
 import datetime
 import io
 import json
@@ -23,7 +24,7 @@ router = APIRouter()
 def result_to_dict_recursive(
     instance: Any, visited: set | None = None
 ) -> dict[str, Any]:
-    """ format SQLalchemy result to json like python dict"""
+    """format SQLalchemy result to JSON like python dict"""
     # code based on https://www.geeksforgeeks.org/python
     #               /serialize-python-sqlalchemy-result-to-json/
     # maybe rust / c / go in .so can do it faster
@@ -34,9 +35,9 @@ def result_to_dict_recursive(
     if not instance:
         return {}
     # because id has all tables
-    instance_id = (instance.__class__, getattr(instance, 'id', None))
+    instance_id = (instance.__class__, getattr(instance, "id", None))
     if instance_id in visited:
-        return {'id': getattr(instance, 'id', None), '__ref__': 'Circular'}
+        return {"id": getattr(instance, "id", None), "__ref__": "Circular"}
     visited.add(instance_id)
 
     ins = inspect(instance)
@@ -45,7 +46,7 @@ def result_to_dict_recursive(
     for column in ins.mapper.column_attrs:
         value = getattr(instance, column.key)
         # convert date/time to iso string format
-        if isinstance(value, (datetime.datetime, datetime.date)):
+        if isinstance(value, datetime.datetime | datetime.date):
             data[column.key] = value.isoformat()
         else:
             data[column.key] = value
@@ -72,19 +73,17 @@ def result_to_dict_recursive(
     return data
 
 
-async def prepare_export_data(
-    chain_id: int, session: AsyncSession
-) -> dict[str, Any]:
-    """ get from db, format to dict """
+async def prepare_export_data(chain_id: int, session: AsyncSession) -> dict[str, Any]:
+    """get from db, format to dict"""
     result = await session.execute(
-        select(AttackChain).where(
-            AttackChain.id == chain_id
-        ).options(  # TEST ME PLS
+        select(AttackChain)
+        .where(AttackChain.id == chain_id)
+        .options(  # TEST ME PLS
             selectinload(AttackChain.user),  # get also user
             selectinload(AttackChain.current_phase),  # get also last phase
-            selectinload(   # get also AttackStep as result list
+            selectinload(  # get also AttackStep as result list
                 AttackChain.attack_step
-                ).selectinload(AttackStep.agent)  # get also Agent
+            ).selectinload(AttackStep.agent),  # get also Agent
         )
     )
     c_chain: AttackChain = result.scalars().first()
@@ -98,14 +97,12 @@ async def export_json(
     chain_id: int,
     is_with_llm: bool = False,
     session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
 ) -> StreamingResponse:
-    """ export chain to json """
+    """export chain to JSON"""
     data: dict = await prepare_export_data(chain_id, session)
     chain_ca: list[AttackChain] = await session.execute(
-        select(AttackChain).where(
-            AttackChain.id == chain_id
-        )
+        select(AttackChain).where(AttackChain.id == chain_id)
     )
     # get first object of select
     chain_c: AttackChain = chain_ca.scalars().first()
@@ -116,29 +113,20 @@ async def export_json(
         llm_a: str = await llm_service.query_llm(
             LLMTemplates.CHAIN_SUMMARIZATION.format(data=data_s)
         )
-        data_e = {
-            "chain_name": chain_name,
-            "chain": data,
-            "llm": llm_a
-        }
+        data_e = {"chain_name": chain_name, "chain": data, "llm": llm_a}
     else:
-        data_e = {
-            "chain_name": chain_name,
-            "chain": data,
-            "llm": "28"
-        }
+        data_e = {"chain_name": chain_name, "chain": data, "llm": "28"}
     json_str = json.dumps(data_e, ensure_ascii=False, indent=2)
-    json_bytes = json_str.encode('utf-8')
+    json_bytes = json_str.encode("utf-8")
 
     file_like = io.BytesIO(json_bytes)
 
     return StreamingResponse(
         file_like,
         media_type="application/json",
-        headers={   # as file for download
-            "Content-Disposition":
-                f"attachment; filename=export_{chain_name}.json"
-        }
+        headers={  # as file for download
+            "Content-Disposition": f"attachment; filename=export_{chain_name}.json"
+        },
     )
 
 
@@ -147,14 +135,12 @@ async def export_yaml(
     chain_id: int,
     is_with_llm: bool = False,
     session: AsyncSession = Depends(deps.get_session),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
 ) -> StreamingResponse:
-    """ export chain to yaml """
+    """export chain to YAML"""
     data = await prepare_export_data(chain_id, session)
     chain_ca: list[AttackChain] = await session.execute(
-        select(AttackChain).where(
-            AttackChain.id == chain_id
-        )
+        select(AttackChain).where(AttackChain.id == chain_id)
     )
     # get first object of select
     chain_c: AttackChain = chain_ca.scalars().first()
@@ -164,29 +150,17 @@ async def export_yaml(
         llm_a: str = await llm_service.query_llm(
             LLMTemplates.CHAIN_SUMMARIZATION.format(data=data_s)
         )
-        data_e = {
-            "chain_name": chain_name,
-            "chain": data,
-            "llm": llm_a
-        }
+        data_e = {"chain_name": chain_name, "chain": data, "llm": llm_a}
     else:
-        data_e = {
-            "chain_name": chain_name,
-            "chain": data,
-            "llm": "28"
-        }
-    yaml_str = yaml.dump(
-        data_e, allow_unicode=True,
-        default_flow_style=False, indent=2
-    )
-    yaml_bytes = yaml_str.encode('utf-8')
+        data_e = {"chain_name": chain_name, "chain": data, "llm": "28"}
+    yaml_str = yaml.dump(data_e, allow_unicode=True, default_flow_style=False, indent=2)
+    yaml_bytes = yaml_str.encode("utf-8")
 
     file_like = io.BytesIO(yaml_bytes)
     return StreamingResponse(
         file_like,
         media_type="application/x-yaml",
-        headers={   # as file for download
-            "Content-Disposition":
-                f"attachment; filename=export_{chain_name}.yaml"
-        }
+        headers={  # as file for download
+            "Content-Disposition": f"attachment; filename=export_{chain_name}.yaml"
+        },
     )

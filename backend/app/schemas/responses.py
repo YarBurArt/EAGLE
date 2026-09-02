@@ -1,6 +1,7 @@
 """
 Module to defining responses types and format
 """
+
 from typing import ClassVar
 
 from pydantic import UUID4, BaseModel, ConfigDict, EmailStr

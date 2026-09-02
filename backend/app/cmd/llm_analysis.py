@@ -1,4 +1,5 @@
-""" Module for unified interface to LLM services """
+"""Module for unified interface to LLM services"""
+
 import os
 from typing import Any
 
@@ -13,10 +14,10 @@ from app.core.llm_templ import LLMTemplates
 g4f.debug.logging = False
 
 load_dotenv()
-IS_LOCAL_LLM: int = int(os.getenv('LLMSERVICE__LOCAL', '0') or '0')
+IS_LOCAL_LLM: int = int(os.getenv("LLMSERVICE__LOCAL", "0") or "0")
 if IS_LOCAL_LLM == 1:
     client_ollama = AsyncClient(
-        host=os.getenv('LLMSERVICE__API_URL', 'http://localhost:11434'),
+        host=os.getenv("LLMSERVICE__API_URL", "http://localhost:11434"),
         timeout=httpx.Timeout(connect=5, read=120, write=10, pool=5),
     )
 else:
@@ -65,25 +66,23 @@ class LLMService:
     async def _local_llm(prompt: str) -> str:
         """Query local Ollama with a single prompt."""
         res = await client_ollama.generate(
-            model=os.getenv('LLMSERVICE__DEFAULT_MODEL', 'mistral'),
+            model=os.getenv("LLMSERVICE__DEFAULT_MODEL", "mistral"),
             prompt=prompt,
             system=LLMTemplates.SYSTEM_PROMT,
         )
         # remove think text for deepseek-r1, qwen, qwq models
-        parts_th = res.response.rsplit('</think>', 1)
+        parts_th = res.response.rsplit("</think>", 1)
         return parts_th[-1] if len(parts_th) > 1 else res.response
 
     @staticmethod
-    async def _local_llm_chat(
-            messages: list[dict[str, Any]]
-    ) -> str:
+    async def _local_llm_chat(messages: list[dict[str, Any]]) -> str:
         """Query local Ollama with multi-turn message history."""
         res = await client_ollama.chat(
-            model=os.getenv('LLMSERVICE__DEFAULT_MODEL', 'mistral'),
+            model=os.getenv("LLMSERVICE__DEFAULT_MODEL", "mistral"),
             messages=messages,
         )
         text = res.message.content or ""
-        parts_th = text.rsplit('</think>', 1)
+        parts_th = text.rsplit("</think>", 1)
         return parts_th[-1] if len(parts_th) > 1 else text
 
     async def _g4f_llm(self, prompt: str, provider_name: str | None) -> str:

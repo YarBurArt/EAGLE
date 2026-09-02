@@ -1,6 +1,7 @@
 """
 Module for test authorization jwt token scenarios
 """
+
 import pytest
 from fastapi import routing, status
 from freezegun import freeze_time
@@ -20,7 +21,7 @@ async def test_api_routes_raise_401_on_jwt_decode_errors(
     client: AsyncClient,
     api_route: routing.APIRoute,
 ) -> None:
-    """ test for responses on invalid jwt """
+    """test for responses on invalid jwt"""
     for method in api_route.methods:
         response = await client.request(
             method=method,
@@ -28,8 +29,7 @@ async def test_api_routes_raise_401_on_jwt_decode_errors(
             headers={"Authorization": "Bearer garbage-invalid-jwt"},
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert response.json() == {
-            "detail": "Token invalid: Not enough segments"}
+        assert response.json() == {"detail": "Token invalid: Not enough segments"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -39,7 +39,7 @@ async def test_api_routes_raise_401_on_jwt_expired_token(
     default_user: User,
     api_route: routing.APIRoute,
 ) -> None:
-    """ test for responses on expired jwt """
+    """test for responses on expired jwt"""
     with freeze_time("2023-01-01"):
         jwt = create_jwt_token(default_user.user_id)
     with freeze_time("2023-02-01"):
@@ -50,8 +50,7 @@ async def test_api_routes_raise_401_on_jwt_expired_token(
                 headers={"Authorization": f"Bearer {jwt.access_token}"},
             )
             assert response.status_code == status.HTTP_401_UNAUTHORIZED
-            assert response.json() == {
-                "detail": "Token invalid: Signature has expired"}
+            assert response.json() == {"detail": "Token invalid: Signature has expired"}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -63,10 +62,8 @@ async def test_api_routes_raise_401_on_jwt_user_deleted(
     api_route: routing.APIRoute,
     session: AsyncSession,
 ) -> None:
-    """ test for responses on invalid jwt cuz without user """
-    query = delete(User).where(
-        User.user_id == default_user.user_id
-        )
+    """test for responses on invalid jwt cuz without user"""
+    query = delete(User).where(User.user_id == default_user.user_id)
     await session.execute(query)
     await session.commit()
 
@@ -77,5 +74,4 @@ async def test_api_routes_raise_401_on_jwt_user_deleted(
             headers=default_user_headers,
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert response.json() == {
-            "detail": api_messages.JWT_ERROR_USER_REMOVED}
+        assert response.json() == {"detail": api_messages.JWT_ERROR_USER_REMOVED}

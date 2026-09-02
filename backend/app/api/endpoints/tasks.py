@@ -2,6 +2,7 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
+
 import asyncio
 import json
 import os
@@ -21,8 +22,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.cmd.c2_tool import execute_local_command
+from app.api.deps import get_chain_controller, get_mythic_client
+from app.cmd.c2_tool import MythicClient
 from app.cmd.proc import (
+    CallbackInfo,
+    ChainContext,
+    PayloadParams,
     analyze_command_output_with_llm,
     check_and_create_mpayload,
     check_and_process_agent_cmd,
@@ -57,27 +62,25 @@ router = APIRouter()
 
 
 @router.post(
-    "/new-chain",
-    description="Create new chain",
-    response_model=NewChainResponse
+    "/new-chain", description="Create new chain", response_model=NewChainResponse
 )
 async def create_new_chain(
     data: NewChainRequest,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> NewChainResponse:
-    """ post endpoint for create chain just by name """
+    """post endpoint for create chain just by name"""
     chain = AttackChain(
         user_id=current_user.user_id,
         chain_name=data.chain_name,
-        final_status="execution"
+        final_status="execution",
     )
     session.add(chain)
     await session.commit()  # otherwise there will be no id
     # keep track of the current in DB for stability
     c_phase = CurrentAttackPhase(
         chain_id=chain.id,
-        phase=phases[0]  # start with recon
+        phase=phases[0],  # start with recon
     )
     session.add(c_phase)
     try:
@@ -90,30 +93,26 @@ async def create_new_chain(
         ) from exc
 
     return NewChainResponse(
-        chain_id=chain.id,
-        chain_name=chain.chain_name,
-        current_phase_name=c_phase.phase
+        chain_id=chain.id, chain_name=chain.chain_name, current_phase_name=c_phase.phase
     )
 
 
 async def get_chain_n_phase(
     session: AsyncSession, chain_name: str, current_user: User
 ) -> tuple[str, int, str]:
-    """ get chain name and current phase name from db by id """
+    """get chain name and current phase name from db by id"""
     # get chain by user_id from get_current_user and chain_name
     chain_ca: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.user_id == current_user.user_id,
-            AttackChain.chain_name == chain_name
+            AttackChain.chain_name == chain_name,
         )
     )
     # get first object of select
     chain_c: AttackChain = chain_ca.scalars().first()
     assert chain_c is not None
     c_phase = await session.execute(
-        select(CurrentAttackPhase).where(
-            CurrentAttackPhase.chain_id == chain_c.id
-        )
+        select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_c.id)
     )
     phase_name_ob: CurrentAttackPhase = c_phase.scalars().first()
     assert phase_name_ob is not None
@@ -124,21 +123,24 @@ async def get_chain_n_phase(
 @router.post(
     "/run-command",
     description="Run shell command on zero agent",
-    response_model=LocalCommandResponse
+    response_model=LocalCommandResponse,
 )
 async def run_local_command(
     data: LocalCommandRequest,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> LocalCommandResponse:
-    """ post endpoint that get chain -> run command ->
-        save as AttackStep with chain id, combine and return with log """
+    """post endpoint that get chain -> run command ->
+    save as AttackStep with chain id, combine and return with log"""
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, data.chain_name, current_user
     )
     # zero agent must be already deployed, that's why we need display id
+    ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
     step, llm_a = await check_and_process_local_cmd(
-        data.command, data.callback_display_id, chain_id, phase_name)
+        data.command, data.callback_display_id, ctx, mythic_client
+    )
     # add attack step with phase
     session.add(step)
     try:
@@ -159,29 +161,37 @@ async def run_local_command(
         command=step.command,
         status=step.status,
         raw_output=step.raw_log,
-        llm_analysis=llm_a
+        llm_analysis=llm_a,
     )
 
 
 @router.post(
     "/run-agent-command",
     description="Run agent command on remote agent like libinject",
-    response_model=LocalCommandResponse
+    response_model=LocalCommandResponse,
 )
 async def run_agent_command(
     data: AgentCommandRequest,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> LocalCommandResponse:
-    """ post endpoint that get chain/phase -> run command on agent ->
-        save as AttackStep with chain id, combine and return with log """
+    """post endpoint that get chain/phase -> run command on agent ->
+    save as AttackStep with chain id, combine and return with log"""
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, data.chain_name, current_user
     )
     # FIXME: display_id from rhost Agent
+    ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
+    cb = CallbackInfo(
+        display_id=data.callback_display_id, tool_name="agent_" + data.tool
+    )
     step, llm_a, c_agent = await check_and_process_agent_cmd(
-        data.callback_display_id, chain_id, data.command_params,
-        'agent_' + data.tool, data.tool, phase_name)
+        cb,
+        ctx,
+        data.command_params,
+        mythic_client,
+    )
     # add attack step with phase
     session.add(step)
     try:
@@ -201,35 +211,39 @@ async def run_agent_command(
         chain_name=chain_name,
         callback_display_id=data.callback_display_id,
         mythic_task_id=step.mythic_task_id,
-        tool_name=step.tool_name,   # already agent_ cuz from AttackStep
+        tool_name=step.tool_name,  # already agent_ cuz from AttackStep
         command=step.command,
         status=step.status,
         raw_output=step.raw_log,
-        llm_analysis=llm_a
+        llm_analysis=llm_a,
     )
 
 
 @router.post(
     "/new-agent",
     description="Create new mythic agent payload, return download url",
-    response_model=NewPayloadResponse
+    response_model=NewPayloadResponse,
 )
 async def new_agent(
     data: NewAgentRequest,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> NewPayloadResponse:
-    """ create new payload C2, save to mythic, return download url """
+    """create new payload C2, save to mythic, return download url"""
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, data.chain_name, current_user
     )
     # None as string for step reproducibility via process_approved_cmd
     p_type = "None" if data.payload_type is None else str(data.payload_type)
     tool_name = "payload_" + p_type
+    ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
     payload_step, llm_a = await check_and_create_mpayload(
-        chain_id=chain_id, tool_name=tool_name, tool_n=p_type,
-        p_lport=-1,  # set as default from .env
-        p_os_type=data.os_type
+        ctx,
+        tool_name,
+        p_type,
+        PayloadParams(lport=-1, os_type=data.os_type),
+        mythic_client=mythic_client,
     )
     session.add(payload_step)
     try:
@@ -242,16 +256,20 @@ async def new_agent(
         ) from exc
     # like https://10.2:7443/direct/download
     #             /95917999-2eff-478c-b71a-6a81e2a83383
-    ip = os.getenv('MYTHIC__SERVER_IP')
-    port = os.getenv('MYTHIC__SERVER_PORT')
+    ip = os.getenv("MYTHIC__SERVER_IP")
+    port = os.getenv("MYTHIC__SERVER_PORT")
     uuid = payload_step.mythic_payload_uuid
     p_download_url = f"https://{ip}:{port}/direct/download/{uuid}"
 
     return NewPayloadResponse(
-        chain_id=chain_id, status=payload_step.status,
-        phase=payload_step.phase, download_url=p_download_url,
-        payload_uuid=uuid, payload_id=payload_step.mythic_payload_id,
-        raw_log=payload_step.raw_log, llm_analysis=llm_a,
+        chain_id=chain_id,
+        status=payload_step.status,
+        phase=payload_step.phase,
+        download_url=p_download_url,
+        payload_uuid=uuid,
+        payload_id=payload_step.mythic_payload_id,
+        raw_log=payload_step.raw_log,
+        llm_analysis=llm_a,
         payload_type=payload_step.tool_name,  # TODO: fix to default types
     )
 
@@ -259,31 +277,34 @@ async def new_agent(
 @router.post(
     "/update-agents",
     description="Add agent to chain with save as AttackStep, Agent",
-    response_model=NewAgentResponse
+    response_model=NewAgentResponse,
 )
 async def update_agent(
     rhost: str,
     chain_name: str,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> NewAgentResponse:
-    """ you run new agent with RCE, by this save to DB """
+    """you run new agent with RCE, by this save to DB"""
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, chain_name, current_user
     )
     chain_steps_list = await session.execute(
         select(AttackStep).where(
             AttackStep.chain_id == chain_id,
-        ))
+        )
+    )
     # we suppose that the previous step was run payload
     chain_steps_l_ca: list[AttackStep] = chain_steps_list.scalars().all()
-    last_step = max(
-        chain_steps_l_ca,
-        key=lambda step: step.update_time
-    )
+    last_step = max(chain_steps_l_ca, key=lambda step: step.update_time)
+    ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
     res: tuple[AttackStep, Agent] = await process_new_callback(
-        chain_id=chain_id, tool_name="getcallback_get_agent_callback_after",
-        cmd=rhost, phase_name=phase_name, parent_step_id=last_step.id
+        ctx,
+        "getcallback_get_agent_callback_after",
+        rhost,
+        last_step.id,
+        mythic_client=mythic_client,
     )
     get_callback_step, new_agent = res
     session.add(get_callback_step)
@@ -300,33 +321,33 @@ async def update_agent(
         os_type=new_agent.os_type,
         rhost=rhost,
         status=new_agent.status,
-        callback_display_id=new_agent.callback_display_id
+        callback_display_id=new_agent.callback_display_id,
     )
 
 
 @router.get(
-    "/status/{display_id}",
-    description="Get status of agent by callback_display_id"
+    "/status/{display_id}", description="Get status of agent by callback_display_id"
 )
 async def read_agent_status(
     display_id: int,
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> str:
-    """ just get status of agent callback """
-    status_agent = await get_agent_status(display_id)
+    """just get status of agent callback"""
+    status_agent = await get_agent_status(display_id, mythic_client)
     return status_agent
 
 
 @router.get(
     "/chain-phase/{chain_id}",
-    description="Get chain info and UCKC phase, last attack step"
+    description="Get chain info and UCKC phase, last attack step",
 )
 async def read_chain_info(
     chain_id: int,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> GetChainPhaseResponse:
-    """ get full info about chain phase """
+    """get full info about chain phase"""
     chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id,
@@ -334,22 +355,17 @@ async def read_chain_info(
     )
     chain_ca: AttackChain = chain_ca_list.scalars().first()
     await session.commit()
-    chain_username = (
-        current_user.username or current_user.email.split("@", 1)[0]
-    )
+    chain_username = current_user.username or current_user.email.split("@", 1)[0]
     chain_c_phase_list: list[CurrentAttackPhase] = await session.execute(
-        select(CurrentAttackPhase).where(
-            CurrentAttackPhase.chain_id == chain_ca.id
-        )
+        select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_ca.id)
     )
     chain_c_phase = chain_c_phase_list.scalars().first()
     current_phase_n = chain_c_phase.phase or "Reconnaissance"
     res_l_step = await session.execute(
-        select(AttackStep).where(
-            AttackStep.chain_id == chain_id
-        ).order_by(
-            desc(AttackStep.update_time)
-        ).limit(1)
+        select(AttackStep)
+        .where(AttackStep.chain_id == chain_id)
+        .order_by(desc(AttackStep.update_time))
+        .limit(1)
     )
     # first because order by
     last_attack_step_r: AttackStep = res_l_step.scalars().first()
@@ -362,25 +378,23 @@ async def read_chain_info(
         user_email=current_user.email,
         final_status=chain_ca.final_status,
         current_phase_name=current_phase_n,
-        last_attack_step=last_attack_step
+        last_attack_step=last_attack_step,
     )
 
 
 @router.post(
     "/next-phase/{chain_id}",
     description="Switch to the next chain phase",
-    response_model=NewPhaseResponse
+    response_model=NewPhaseResponse,
 )
 async def next_phase(
     chain_id: int,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> NewPhaseResponse:
-    """ switch to next by UCKC phases list """
+    """switch to next by UCKC phases list"""
     res_phase: list[CurrentAttackPhase] = await session.execute(
-        select(CurrentAttackPhase).where(
-            CurrentAttackPhase.chain_id == chain_id
-        )
+        select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_id)
     )
     # users should only know the numbers of their chains
     c_phase: CurrentAttackPhase = res_phase.scalars().first()
@@ -388,27 +402,23 @@ async def next_phase(
         idx = phases.index(c_phase.phase)  # from proc or config
     except ValueError as exc:
         raise HTTPException(
-            status_code=400,
-            detail="Unknown phase, check UCKC phases"
+            status_code=400, detail="Unknown phase, check UCKC phases"
         ) from exc
     if idx + 1 >= len(phases):
         raise HTTPException(
             status_code=400,
-            detail="Already last phase, try to find a way to save the chain."
+            detail="Already last phase, try to find a way to save the chain.",
         )
     c_phase.phase = phases[idx + 1]  # temp: by tuple plus 1
     # already check exceptions
     await session.commit()
-    return NewPhaseResponse(
-        chain_id=c_phase.chain_id,
-        current_phase_name=c_phase.phase
-    )
+    return NewPhaseResponse(chain_id=c_phase.chain_id, current_phase_name=c_phase.phase)
 
 
 @router.post(
     "/set-phase/{chain_id}",
     description="Switch to the specific chain phase",
-    response_model=NewPhaseResponse
+    response_model=NewPhaseResponse,
 )
 async def set_phase(
     chain_id: int,
@@ -416,17 +426,12 @@ async def set_phase(
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> NewPhaseResponse:
-    """ switch to the specific phase in UCKC phases list """
+    """switch to the specific phase in UCKC phases list"""
     if phase_name not in phases:
-        raise HTTPException(
-            status_code=400,
-            detail="Unknown phase, check UCKC phases"
-        )
+        raise HTTPException(status_code=400, detail="Unknown phase, check UCKC phases")
     # check by id for phase in chain
     res_phase: list[CurrentAttackPhase] = await session.execute(
-        select(CurrentAttackPhase).where(
-            CurrentAttackPhase.chain_id == chain_id
-        )
+        select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_id)
     )
     c_phase: CurrentAttackPhase = res_phase.scalars().first()
     if not c_phase:
@@ -437,34 +442,32 @@ async def set_phase(
         # or just switch the phase
         c_phase.phase = phase_name
     await session.commit()
-    return NewPhaseResponse(
-        chain_id=c_phase.chain_id,
-        current_phase_name=c_phase.phase
-    )
+    return NewPhaseResponse(chain_id=c_phase.chain_id, current_phase_name=c_phase.phase)
 
 
 @router.post(
     "/reject-s/{chain_name}",
     description="Reject the last suggested step in the current chain",
-    response_model=AttackStepResponse
+    response_model=AttackStepResponse,
 )
 async def reject_last_step_or_cmd(
     chain_name: str,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
 ) -> AttackStepResponse:
-    """ reject last step and delete from db """
+    """reject last step and delete from db"""
     # like temp check for user, chain_name code
     chain_name_db, chain_id, phase_name = await get_chain_n_phase(
         session, chain_name, current_user
     )
     res_l_step = await session.execute(
-        select(AttackStep).where(
+        select(AttackStep)
+        .where(
             # chain id from check by name
             AttackStep.chain_id == chain_id
-        ).order_by(
-            desc(AttackStep.update_time)
-        ).limit(1)
+        )
+        .order_by(desc(AttackStep.update_time))
+        .limit(1)
     )
     # first because order by
     last_attack_step_obj: AttackStep = res_l_step.scalars().first()
@@ -475,22 +478,11 @@ async def reject_last_step_or_cmd(
     return last_attack_step
 
 
-class ChainController:
-    def __init__(self):
-        self.active_chains = {}
-
-    def cancel_chain(self, chain_id: int):
-        if chain_id in self.active_chains:
-            # stop by asyncio.Event()
-            self.active_chains[chain_id].set()
-
-
-chain_controller = ChainController()
-
-
 async def perform_chain_step(
-    steps: list[AttackStep], zero_display_id: int,
+    steps: list[AttackStep],
+    zero_display_id: int,
     cancel_event: asyncio.Event,
+    mythic_client: MythicClient,
 ) -> dict:
     """generator to yield result of each step"""
     async with database_session.get_async_session() as session:
@@ -498,9 +490,7 @@ async def perform_chain_step(
             if cancel_event.is_set():
                 break
             res_agent = await session.execute(
-                select(Agent).where(
-                    Agent.step_id == step.id
-                )
+                select(Agent).where(Agent.step_id == step.id)
             )
             c_agent: Agent = res_agent.scalars().first()
         if c_agent:
@@ -510,11 +500,14 @@ async def perform_chain_step(
             display_id = zero_display_id
             p_os_type = "Windows"  # cuz most popular target
         # _ is new agent what we don't need
+        ctx = ChainContext(chain_id=step.chain_id, phase_name=step.phase)
+        cb = CallbackInfo(display_id=display_id, tool_name=step.tool_name)
         result, llm_a, _ = await process_approved_cmd(
-            cmd=step.command, chain_id=step.chain_id,
-            tool_name=step.tool_name, phase_name=step.phase,
-            display_id=display_id,
-            p_os_type=p_os_type
+            cmd=step.command,
+            ctx=ctx,
+            cb=cb,
+            payload_params=PayloadParams(os_type=p_os_type),
+            mythic_client=mythic_client,
         )  # temp
         resp_step = {
             "step_id": result.id,
@@ -524,12 +517,12 @@ async def perform_chain_step(
             "mythic_payload_uuid": result.mythic_payload_uuid,
             "status": result.status,
             "raw_log": result.raw_log,
-            "command": result.command
+            "command": result.command,
         }
         out_d = {
             # result.model_dump() -> pydantic issue #6554
             "AttackStep": resp_step,
-            "llm_analysis": llm_a
+            "llm_analysis": llm_a,
         }
         # back to StreamingResponse
         yield json.dumps(out_d, default=str) + "\n"
@@ -539,14 +532,15 @@ async def perform_chain_step(
     "/run-chain/{chain_id}",
     description="Run attack chain from db by id",
 )
-async def run_chain(
+async def run_chain(  # noqa: PLR0913, PLR0917
     chain_id: int,
     zero_display_id: int,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    mythic_client: MythicClient = Depends(get_mythic_client),
+    chain_controller=Depends(get_chain_controller),
 ) -> StreamingResponse:
-    """ executes commands via proc in order of time """
-    global chain_controller  # FIXME
+    """executes commands via proc in order of time"""
     chain_steps_list = await session.execute(
         select(AttackStep).where(
             AttackStep.chain_id == chain_id,
@@ -556,26 +550,27 @@ async def run_chain(
     # generate list of successed steps and filter by last update_time
     f_sorted_steps = sorted(  # TODO: that's slower that via SQLalchemy
         (i for i in chain_steps_l_ca if i.status == "success"),
-        key=lambda step: step.update_time
+        key=lambda step: step.update_time,
     )
     # to interrupt globally specific chain
     cancel_event = asyncio.Event()
     chain_controller.active_chains[chain_id] = cancel_event
     return StreamingResponse(
         perform_chain_step(
-            f_sorted_steps, zero_display_id, cancel_event
+            f_sorted_steps, zero_display_id, cancel_event, mythic_client
         ),
-        media_type="application/json"
+        media_type="application/json",
     )
 
 
 @router.websocket("/ws/cancel-chain/{chain_id}")
 async def cancel_chain_ws(
-    websocket: WebSocket, chain_id: int,
+    websocket: WebSocket,
+    chain_id: int,
     session: AsyncSession = Depends(deps.get_session),
     current_user: User = Depends(deps.get_current_user),
+    chain_controller=Depends(get_chain_controller),
 ):
-    global chain_controller  # FIXME
     await websocket.accept()
     try:
         chain_name = await websocket.receive_text()
@@ -595,10 +590,11 @@ async def cancel_chain_ws(
 
 @router.post("/cancel-chain/{chain_id}")
 async def cancel_chain_a_http(
-    chain_id: int, chain_name,
-    session: AsyncSession = Depends(deps.get_session)
+    chain_id: int,
+    chain_name,
+    session: AsyncSession = Depends(deps.get_session),
+    chain_controller=Depends(get_chain_controller),
 ):
-    global chain_controller  # FIXME
     chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id,
@@ -610,16 +606,14 @@ async def cancel_chain_a_http(
         # cancel chain via global chain controller
         chain_controller.cancel_chain(chain_id)
 
-    return JSONResponse(content={
-        "status": "canceled",
-        "chain_name": chain_name
-    })
+    return JSONResponse(content={"status": "canceled", "chain_name": chain_name})
 
 
 @router.post("/approve-action")
 async def approve_action_from_llm(
     action_request: ActionApprovalRequest,
-    session: AsyncSession = Depends(deps.get_session)
+    session: AsyncSession = Depends(deps.get_session),
+    mythic_client: MythicClient = Depends(get_mythic_client),
 ):
     """
     Endpoint for approved actions and execution
@@ -627,19 +621,23 @@ async def approve_action_from_llm(
     """
     try:
         # Execute the approved action
+        ctx = ChainContext(
+            chain_id=action_request.chain_id, phase_name=action_request.phase
+        )
+        cb = CallbackInfo(
+            display_id=action_request.agent_id,
+            # like custom_c2_pivoting_agent -> on agent: link_tcp ...
+            tool_name=f"{action_request.type_cmd}_{action_request.type_tool}",
+        )
         result = await process_approved_cmd(
             cmd=action_request.command,
-            chain_id=action_request.chain_id,
-            # like custom_c2_pivoting_agent -> on agent: link_tcp ...
-            tool_name=f"{
-                action_request.type_cmd
-            }_{action_request.type_tool}",
-            display_id=action_request.agent_id,
-            phase_name=action_request.phase,
-            p_os_type=action_request.target_os_type
+            ctx=ctx,
+            cb=cb,
+            payload_params=PayloadParams(os_type=action_request.target_os_type),
+            mythic_client=mythic_client,
         )
 
-        if hasattr(result, '__await__'):
+        if hasattr(result, "__await__"):
             attack_step, llm_analysis, agent = await result
         else:
             attack_step, llm_analysis, agent = result
@@ -654,54 +652,50 @@ async def approve_action_from_llm(
             # Обновляем объект после сохранения
             await session.commit()
             await session.refresh(attack_step)
-            if agent != '':  # temp
+            if agent != "":  # temp
                 agent.step_id = attack_step.id
                 session.add(agent)
                 await session.commit()
         except IntegrityError as exc:
             await session.rollback()
             raise HTTPException(
-                status_code=400,
-                detail="Database integrity error"
+                status_code=400, detail="Database integrity error"
             ) from exc
 
         return {
             "success": True,
             "attack_step": attack_step,
             "llm_analysis": llm_analysis,
-            "message": "Action executed and saved successfully"
+            "message": "Action executed and saved successfully",
         }
 
     except Exception as e:
         # no need to save to AttackStep, only crit errors for 500
         raise HTTPException(
-            status_code=500,
-            detail=f"Error executing approved action: {str(e)}"
+            status_code=500, detail=f"Error executing approved action: {str(e)}"
         ) from e
 
 
 @router.post("/api/llm/action/execute")  # temp
-async def execute_approved_action(action_request: ActionExecutionRequest):
+async def execute_approved_action(
+    action_request: ActionExecutionRequest,
+    mythic_client: MythicClient = Depends(get_mythic_client),
+):
     """
     Endpoint for executing approved actions with results saving
     """
     try:
         # Validate request
         if not action_request.command:
-            raise HTTPException(
-                status_code=400,
-                detail="Command is required"
-            )
+            raise HTTPException(status_code=400, detail="Command is required")
         # Execute command on agent
-        res: tuple = await execute_local_command(
-            action_request.command,
-            action_request.agent_display_id
+        res: tuple = await mythic_client.execute_local_command(
+            action_request.command, action_request.agent_display_id
         )
         output, mythic_task_id, mythic_payload_id, mythic_payload_uuid = res
         # Analyze output with LLM
         llm_analysis_result: str = await analyze_command_output_with_llm(
-            action_request.command,
-            output
+            action_request.command, output
         )
 
         # Create AttackStep object
@@ -714,17 +708,16 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
             mythic_payload_uuid="",
             mythic_payload_id="",
             raw_log=output,
-            status="success"
+            status="success",
         )
         return {
             "success": True,
             "attack_step": attack_step,
             "message": "Action executed and saved to AttackStep successfully",
-            "llm analysis": str(llm_analysis_result)
+            "llm analysis": str(llm_analysis_result),
         }
 
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to execute approved action: {str(e)}"
+            status_code=500, detail=f"Failed to execute approved action: {str(e)}"
         ) from e

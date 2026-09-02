@@ -1,6 +1,7 @@
 """
 Module for test register scenarios, their correct http response
 """
+
 import pytest
 from fastapi import status
 from httpx import AsyncClient
@@ -67,5 +68,4 @@ async def test_register_new_user_cannot_create_already_created_user(
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json() == {
-        "detail": api_messages.EMAIL_ADDRESS_ALREADY_USED}
+    assert response.json() == {"detail": api_messages.EMAIL_ADDRESS_ALREADY_USED}

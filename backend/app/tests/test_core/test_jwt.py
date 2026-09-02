@@ -1,6 +1,7 @@
 """
 Module for test jwt scenarios and the main weaknesses
 """
+
 import time
 
 import pytest
@@ -30,8 +31,7 @@ def test_jwt_payload_is_correct() -> None:
     assert token.payload.iss == get_settings().security.jwt_issuer
     assert (
         token.payload.exp
-        == int(time.time()) +
-        get_settings().security.jwt_access_token_expire_secs
+        == int(time.time()) + get_settings().security.jwt_access_token_expire_secs
     )
 
 
