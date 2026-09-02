@@ -1,33 +1,28 @@
 """ Module for export chain in json / yaml by file stream
     with LLM summarization of whole chain """
+import datetime
 import io
 import json
+from typing import Any
+
 import yaml
-import datetime
-from typing import Dict, Any, Optional, List
-
-from sqlalchemy import select, inspect
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import (
-    APIRouter, Depends
-)
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy import inspect, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api import deps
 from app.cmd.llm_analysis import llm_service
 from app.core.llm_templ import LLMTemplates
-from app.models import (
-    User, AttackChain, AttackStep
-)
+from app.models import AttackChain, AttackStep, User
 
 router = APIRouter()
 
 
 def result_to_dict_recursive(
-    instance: Any, visited: Optional[set] = None
-) -> Dict[str, Any]:
+    instance: Any, visited: set | None = None
+) -> dict[str, Any]:
     """ format SQLalchemy result to json like python dict"""
     # code based on https://www.geeksforgeeks.org/python
     #               /serialize-python-sqlalchemy-result-to-json/
@@ -79,7 +74,7 @@ def result_to_dict_recursive(
 
 async def prepare_export_data(
     chain_id: int, session: AsyncSession
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """ get from db, format to dict """
     result = await session.execute(
         select(AttackChain).where(
@@ -106,8 +101,8 @@ async def export_json(
     current_user: User = Depends(deps.get_current_user)
 ) -> StreamingResponse:
     """ export chain to json """
-    data: Dict = await prepare_export_data(chain_id, session)
-    chain_ca: List[AttackChain] = await session.execute(
+    data: dict = await prepare_export_data(chain_id, session)
+    chain_ca: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id
         )
@@ -156,7 +151,7 @@ async def export_yaml(
 ) -> StreamingResponse:
     """ export chain to yaml """
     data = await prepare_export_data(chain_id, session)
-    chain_ca: List[AttackChain] = await session.execute(
+    chain_ca: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id
         )

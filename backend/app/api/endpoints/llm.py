@@ -4,24 +4,28 @@ to simplify the creation of a chain relative to the user
 idk what is g4f.gui.run_gui()
 """
 import json
-from typing import Dict, Any, List
+from typing import Any
 
-from fastapi import (
-    APIRouter, HTTPException, Depends
-)
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
-from app.models import (
-    User, AttackChain, AttackStep, CurrentAttackPhase,
-)
 import g4f  # temp
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api import deps
 from app.cmd.llm_analysis import llm_service
 from app.core.llm_templ import LLMTemplates
-from app.schemas.requests import (
-    QueryRequest, CodeAnalysisRequest, PayloadRequest, SuggestActionRequest
+from app.models import (
+    AttackChain,
+    AttackStep,
+    CurrentAttackPhase,
+    User,
 )
-from app.api import deps
+from app.schemas.requests import (
+    CodeAnalysisRequest,
+    PayloadRequest,
+    QueryRequest,
+    SuggestActionRequest,
+)
 from app.schemas.responses import (
     SuggestActionResponse,
 )
@@ -99,14 +103,14 @@ async def suggest_action_from_llm(
 ):
     """ suggest action for approve based on process_approved_cmd
         then user fix and send to cmd approve by hand """
-    chain_ca_list: List[AttackChain] = await session.execute(
+    chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == req.chain_id,
         )
     )
     chain_ca: AttackChain = chain_ca_list.scalars().first()
     await session.commit()
-    chain_c_phase_list: List[CurrentAttackPhase] = await session.execute(
+    chain_c_phase_list: list[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_ca.id
         )
@@ -206,7 +210,7 @@ async def get_providers():
 
 
 @router.post("/chat", description="Chat with llm in context of chain")
-async def chat_conversation(messages: Dict[str, Any]):
+async def chat_conversation(messages: dict[str, Any]):
     """
     Эндпоинт для ведения диалога
     """

@@ -1,10 +1,10 @@
 """ Module for unified interface to LLM services """
 import os
-from dotenv import load_dotenv
 
 import g4f
-from ollama import Client
+from dotenv import load_dotenv
 from fastapi import HTTPException
+from ollama import Client
 
 from app.core.llm_templ import LLMTemplates
 

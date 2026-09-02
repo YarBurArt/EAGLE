@@ -2,21 +2,19 @@
 Main module responsible for the upper-level API design,
 security middleware layers, and Swagger parameters
 """
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-# from fastapi.middleware.trustedhost import TrustedHostMiddleware
-
-from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+# from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
-from app.core.config import DEBUG_MODE_C  # , get_settings,
-
 from app.cmd.c2_tool import init_mythic
-
+from app.core.config import DEBUG_MODE_C  # , get_settings,
 
 app = FastAPI(
     title="EAGLE",

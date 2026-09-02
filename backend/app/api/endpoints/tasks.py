@@ -2,44 +2,54 @@
 Module for tasks endpoints, also might repeat tasks
 based on chain id or commands and payloads from exported chain
 """
-import os
-import json
 import asyncio
-from typing import List, Tuple, Dict
-from dotenv import load_dotenv
+import json
+import os
 
+from dotenv import load_dotenv
 from fastapi import (
-    APIRouter, Depends, HTTPException, status,
-    WebSocket, WebSocketDisconnect
+    APIRouter,
+    Depends,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
 )
-from fastapi.responses import StreamingResponse, JSONResponse
-from sqlalchemy import select, desc
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.cmd.c2_tool import execute_local_command
 from app.api import deps
-from app.core.config import phases
-from app.models import (
-    User, AttackChain, AttackStep, CurrentAttackPhase, Agent
+from app.cmd.c2_tool import execute_local_command
+from app.cmd.proc import (
+    analyze_command_output_with_llm,
+    check_and_create_mpayload,
+    check_and_process_agent_cmd,
+    check_and_process_local_cmd,
+    get_agent_status,
+    process_approved_cmd,
+    process_new_callback,
 )
+from app.core.config import phases
+from app.models import Agent, AttackChain, AttackStep, CurrentAttackPhase, User
 from app.schemas.requests import (
-    NewChainRequest, LocalCommandRequest,
-    ActionApprovalRequest, ActionExecutionRequest,
-    AgentCommandRequest, NewAgentRequest
+    ActionApprovalRequest,
+    ActionExecutionRequest,
+    AgentCommandRequest,
+    LocalCommandRequest,
+    NewAgentRequest,
+    NewChainRequest,
 )
 from app.schemas.responses import (
-    LocalCommandResponse, NewChainResponse, GetChainPhaseResponse,
-    NewPhaseResponse, NewAgentResponse, AttackStepResponse,
-    NewPayloadResponse
+    AttackStepResponse,
+    GetChainPhaseResponse,
+    LocalCommandResponse,
+    NewAgentResponse,
+    NewChainResponse,
+    NewPayloadResponse,
+    NewPhaseResponse,
 )
-from app.cmd.proc import (
-    check_and_process_local_cmd, get_agent_status,
-    analyze_command_output_with_llm, process_approved_cmd,
-    check_and_process_agent_cmd, process_new_callback,
-    check_and_create_mpayload
-)
-
 
 load_dotenv()
 router = APIRouter()
@@ -87,10 +97,10 @@ async def create_new_chain(
 
 async def get_chain_n_phase(
     session: AsyncSession, chain_name: str, current_user: User
-) -> Tuple[str, int, str]:
+) -> tuple[str, int, str]:
     """ get chain name and current phase name from db by id """
     # get chain by user_id from get_current_user and chain_name
-    chain_ca: List[AttackChain] = await session.execute(
+    chain_ca: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.user_id == current_user.user_id,
             AttackChain.chain_name == chain_name
@@ -265,12 +275,12 @@ async def update_agent(
             AttackStep.chain_id == chain_id,
         ))
     # we suppose that the previous step was run payload
-    chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
+    chain_steps_l_ca: list[AttackStep] = chain_steps_list.scalars().all()
     last_step = max(
         chain_steps_l_ca,
         key=lambda step: step.update_time
     )
-    res: Tuple[AttackStep, Agent] = await process_new_callback(
+    res: tuple[AttackStep, Agent] = await process_new_callback(
         chain_id=chain_id, tool_name="getcallback_get_agent_callback_after",
         cmd=rhost, phase_name=phase_name, parent_step_id=last_step.id
     )
@@ -316,7 +326,7 @@ async def read_chain_info(
     current_user: User = Depends(deps.get_current_user),
 ) -> GetChainPhaseResponse:
     """ get full info about chain phase """
-    chain_ca_list: List[AttackChain] = await session.execute(
+    chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id,
         )
@@ -326,7 +336,7 @@ async def read_chain_info(
     chain_username = (
         current_user.username or current_user.email.split("@", 1)[0]
     )
-    chain_c_phase_list: List[CurrentAttackPhase] = await session.execute(
+    chain_c_phase_list: list[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_ca.id
         )
@@ -366,7 +376,7 @@ async def next_phase(
     current_user: User = Depends(deps.get_current_user),
 ) -> NewPhaseResponse:
     """ switch to next by UCKC phases list """
-    res_phase: List[CurrentAttackPhase] = await session.execute(
+    res_phase: list[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_id
         )
@@ -412,7 +422,7 @@ async def set_phase(
             detail="Unknown phase, check UCKC phases"
         )
     # check by id for phase in chain
-    res_phase: List[CurrentAttackPhase] = await session.execute(
+    res_phase: list[CurrentAttackPhase] = await session.execute(
         select(CurrentAttackPhase).where(
             CurrentAttackPhase.chain_id == chain_id
         )
@@ -478,9 +488,9 @@ chain_controller = ChainController()
 
 
 async def perform_chain_step(
-    steps: List[AttackStep], zero_display_id: int,
+    steps: list[AttackStep], zero_display_id: int,
     session: AsyncSession, cancel_event: asyncio.Event
-) -> Dict:
+) -> dict:
     """ generator to yield result of each step """
     for step in steps:
         if cancel_event.is_set():  # check asyncio.Event status
@@ -541,7 +551,7 @@ async def run_chain(
             AttackStep.chain_id == chain_id,
         )
     )
-    chain_steps_l_ca: List[AttackStep] = chain_steps_list.scalars().all()
+    chain_steps_l_ca: list[AttackStep] = chain_steps_list.scalars().all()
     # generate list of successed steps and filter by last update_time
     f_sorted_steps = sorted(  # TODO: that's slower that via SQLalchemy
         (i for i in chain_steps_l_ca if i.status == "success"),
@@ -568,7 +578,7 @@ async def cancel_chain_ws(
     await websocket.accept()
     try:
         chain_name = await websocket.receive_text()
-        chain_ca_list: List[AttackChain] = await session.execute(
+        chain_ca_list: list[AttackChain] = await session.execute(
             select(AttackChain).where(
                 AttackChain.id == chain_id,
             )
@@ -588,7 +598,7 @@ async def cancel_chain_a_http(
     session: AsyncSession = Depends(deps.get_session)
 ):
     global chain_controller  # FIXME
-    chain_ca_list: List[AttackChain] = await session.execute(
+    chain_ca_list: list[AttackChain] = await session.execute(
         select(AttackChain).where(
             AttackChain.id == chain_id,
         )
@@ -682,7 +692,7 @@ async def execute_approved_action(action_request: ActionExecutionRequest):
                 detail="Command is required"
             )
         # Execute command on agent
-        res: Tuple = await execute_local_command(
+        res: tuple = await execute_local_command(
             action_request.command,
             action_request.agent_display_id
         )

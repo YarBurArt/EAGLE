@@ -2,10 +2,11 @@
 Module for the general logic of token tests
 """
 import time
+
 from sqlalchemy import func, select
 
-from app.models import RefreshToken
 from app.core.security.jwt import verify_jwt_token
+from app.models import RefreshToken
 
 
 async def check_refresh_token(token, session) -> bool:

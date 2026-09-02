@@ -1,8 +1,9 @@
 """
 Module to defining responses types and format
 """
-from typing import Optional, ClassVar
-from pydantic import BaseModel, ConfigDict, EmailStr, UUID4
+from typing import ClassVar
+
+from pydantic import UUID4, BaseModel, ConfigDict, EmailStr
 
 
 class BaseResponse(BaseModel):
@@ -20,8 +21,8 @@ class AccessTokenResponse(BaseResponse):
 class UserResponse(BaseResponse):
     user_id: UUID4
     email: EmailStr
-    role: Optional[str] = "user"
-    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
+    role: str | None = "user"
+    username: str | None = "g3r4lt-w13dzm1n-pl"
 
 
 class NewChainResponse(BaseResponse):
@@ -48,8 +49,8 @@ class LocalCommandResponse(BaseResponse):
 
 
 class AttackStepResponse(BaseResponse):
-    id: Optional[int]
-    chain_id: Optional[int]
+    id: int | None
+    chain_id: int | None
     phase: str
     tool_name: str
     command: str
@@ -64,11 +65,11 @@ class GetChainPhaseResponse(BaseResponse):
     chain_id: int
     user_id: UUID4
     chain_name: str
-    username: Optional[str] = "g3r4lt-w13dzm1n-pl"
+    username: str | None = "g3r4lt-w13dzm1n-pl"
     user_email: str
     final_status: str
     current_phase_name: str
-    last_attack_step: Optional[AttackStepResponse]
+    last_attack_step: AttackStepResponse | None
 
 
 class NewAgentResponse(BaseResponse):
@@ -82,20 +83,20 @@ class NewPayloadResponse(BaseResponse):
     chain_id: int
     status: str
     phase: str
-    payload_type: Optional[str]  # based on os
+    payload_type: str | None  # based on os
     payload_uuid: str | UUID4
-    payload_id: Optional[int]
+    payload_id: int | None
     download_url: str
-    raw_log: Optional[str]
+    raw_log: str | None
     llm_analysis: str
 
 
 # almost full from LLM
 class SuggestActionResponse(BaseResponse):
-    chain_id: Optional[int] = 0
-    agent_id: Optional[int] = 0
-    command: Optional[str] = "whoami"
-    phase: Optional[str] = "Reconnaissance"
-    target_os_type: Optional[str] = None
-    type_cmd: Optional[str] = None
-    type_tool: Optional[str] = "whoami"
+    chain_id: int | None = 0
+    agent_id: int | None = 0
+    command: str | None = "whoami"
+    phase: str | None = "Reconnaissance"
+    target_os_type: str | None = None
+    type_cmd: str | None = None
+    type_tool: str | None = "whoami"

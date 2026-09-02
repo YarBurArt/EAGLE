@@ -2,15 +2,15 @@
 Module that handles all responsibilities related
 to working with Mythic C2
 """
-import os
 import json
-import uuid
+import os
 import socket
-from typing import List, Tuple
-from pydantic import BaseModel, UUID4
+import uuid
 
-from mythic import mythic
 from dotenv import load_dotenv
+from mythic import mythic
+from pydantic import UUID4, BaseModel
+
 # from app.core.config import get_settings
 
 mythic_instance = None
@@ -112,14 +112,14 @@ async def create_payload_d(
 
 async def get_cmd_list_for_payload(
     p_type: str = "merlin", os_type: str = "Windows"
-) -> List[str]:
+) -> list[str]:
     """ for llm get all available commands by type and os """
     resp = await mythic.get_all_commands_for_payloadtype(
         mythic=mythic_instance,
         payload_type_name=p_type
     )
     # filter by os, maybe later with custom_return_attributes GraphQL
-    cmd_list: List[str] = []
+    cmd_list: list[str] = []
     for cmd in resp:
         at_os = cmd['attributes']['supported_os']
         if not at_os or os_type in at_os:  # [] means any os
@@ -153,7 +153,7 @@ async def c2_pivoting_agent(display_id, lport, agent_type) -> str:
     return status
 
 
-async def get_agent_callback_after(rhost) -> Tuple[str, str, int]:
+async def get_agent_callback_after(rhost) -> tuple[str, str, int]:
     """ get os, status, display_id of new callback,
         you must run this after payload """
     # payload is delivered and start by user cuz diversity of RCE
@@ -187,7 +187,7 @@ async def get_agent_callback_after(rhost) -> Tuple[str, str, int]:
     return "Linux", "fail", 1
 
 
-async def get_os_by_display_id(display_id) -> Tuple[str, str, str]:
+async def get_os_by_display_id(display_id) -> tuple[str, str, str]:
     """ get OS/hostname by callback display id to Agent """
     custom_attributes = """
     id
@@ -210,7 +210,7 @@ async def get_os_by_display_id(display_id) -> Tuple[str, str, str]:
     return "windows", "Windows", "fail"
 
 
-async def get_agent_callback_before(rhost) -> Tuple[str, str, int]:
+async def get_agent_callback_before(rhost) -> tuple[str, str, int]:
     """ get os, status, display_id of new callback,
         you must run payload after this func or with timeout """
     # payload is delivered and start by user cuz diversity of RCE
@@ -242,7 +242,7 @@ async def check_status(callback_display_id: int) -> str:
     return "fail"
 
 
-async def get_payload_ids(callback_display_id) -> Tuple[int, UUID4]:
+async def get_payload_ids(callback_display_id) -> tuple[int, UUID4]:
     """ get payload id and uuid from display id """
     global mythic_instance
 
@@ -309,7 +309,7 @@ async def execute_agent_command_o(
     )
 
 
-async def mimikatz_on_agent(display_id, agent_type) -> Tuple[str, int, UUID4]:
+async def mimikatz_on_agent(display_id, agent_type) -> tuple[str, int, UUID4]:
     """ run mimikatz from agent to dump LSASS, mostly for agent pivoting """
     if agent_type == "apollo":
         result: AgentCommandOutput = await execute_agent_command_o(

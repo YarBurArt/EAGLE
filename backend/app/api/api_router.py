@@ -1,11 +1,13 @@
 """ module for route http paths, format http responses """
-from fastapi import APIRouter
-# temp
-from fastapi.responses import HTMLResponse
 from pathlib import Path
 
+from fastapi import APIRouter
+
+# temp
+from fastapi.responses import HTMLResponse
+
 from app.api import api_messages
-from app.api.endpoints import auth, users, tasks, llm, kill_chain
+from app.api.endpoints import auth, kill_chain, llm, tasks, users
 
 auth_router = APIRouter()
 auth_router.include_router(auth.router, prefix="/auth", tags=["auth"])

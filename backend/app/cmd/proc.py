@@ -2,40 +2,42 @@
 module for processing commands in the context of a chain,
 based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 """
-import time
-import json
 import hashlib
-from typing import Tuple, List, Optional
-from pydantic import BaseModel
+import json
+import time
 
 from fastapi import HTTPException, status
+from pydantic import BaseModel
 
-from app.core.llm_templ import LLMTemplates
-from app.cmd.c2_tool import (
-    execute_local_command, check_status, AgentCommandOutput,
-    get_cmd_list_for_payload, execute_agent_command_o,
-    create_payload_d, get_agent_callback_after, get_payload_ids,
-    get_os_by_display_id
-)
 import app.cmd.c2_tool as c2_tool_c_cmd
-from app.models import AttackStep, Agent
-from app.cmd.llm_analysis import llm_service
-from app.core.config import (
-    phase_prompts, PHASE_COMMANDS, UNSAFE_CMD
+from app.cmd.c2_tool import (
+    AgentCommandOutput,
+    check_status,
+    create_payload_d,
+    execute_agent_command_o,
+    execute_local_command,
+    get_agent_callback_after,
+    get_cmd_list_for_payload,
+    get_os_by_display_id,
+    get_payload_ids,
 )
+from app.cmd.llm_analysis import llm_service
+from app.core.config import PHASE_COMMANDS, UNSAFE_CMD, phase_prompts
+from app.core.llm_templ import LLMTemplates
+from app.models import Agent, AttackStep
 
 
 class ActionSuggestionsResponse(BaseModel):
     """Pydantic model for LLM action suggestions response"""
     phase: str
-    priorities: Optional[List[str]] = []
-    tools: Optional[List[str]] = []
-    attack_vectors: Optional[List[str]] = []
-    what_to_look_for: Optional[List[str]] = []
-    next_steps: Optional[List[str]] = []
-    commands: Optional[List[str]] = []
-    error: Optional[str] = None
-    format: Optional[str] = "json"
+    priorities: list[str] | None = []
+    tools: list[str] | None = []
+    attack_vectors: list[str] | None = []
+    what_to_look_for: list[str] | None = []
+    next_steps: list[str] | None = []
+    commands: list[str] | None = []
+    error: str | None = None
+    format: str | None = "json"
 
 
 async def init_agent():
@@ -97,7 +99,7 @@ async def process_approved_cmd(
 
 async def process_new_callback(
     chain_id, tool_name, cmd, phase_name, parent_step_id
-) -> Tuple[AttackStep, Agent]:
+) -> tuple[AttackStep, Agent]:
     """ for save to Agent table by callback """
     res = await get_agent_callback_after(cmd)  # cmd is rhost
     os_type, status, display_id = res
@@ -122,7 +124,7 @@ async def process_new_callback(
 async def check_and_process_agent_cmd(
     display_id: int, chain_id: int, cmd: str, tool_name: str,
     tool_n: str, phase: str
-) -> Tuple[AttackStep, str]:
+) -> tuple[AttackStep, str]:
     """ run commands on agent and return output based on tool """
     assert cmd not in UNSAFE_CMD
     try:
@@ -161,7 +163,7 @@ async def check_and_process_agent_cmd(
 
 async def check_and_create_mpayload(
     chain_id: int, tool_name: str, tool_n: str, p_os_type: str, p_lport: str
-) -> Tuple[AttackStep, str]:
+) -> tuple[AttackStep, str]:
     """ check payload parameters and create payload, save in mythic,
         return uuid/id to get information or send to rhost """
     assert p_os_type in ['Windows', 'macOS', 'Linux']  # from mythic api
@@ -193,7 +195,7 @@ async def get_agent_status(callback_display_id):
 
 async def check_and_process_local_cmd(
         cmd: str, c_display_id: int, chain_id: int, phase_name: str
-) -> Tuple[AttackStep, str]:
+) -> tuple[AttackStep, str]:
     """ async function for check is safe command ->
         execute on zero agent, formatting to AttackStep """
     assert cmd not in UNSAFE_CMD

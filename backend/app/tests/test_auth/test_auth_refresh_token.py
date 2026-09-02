@@ -15,11 +15,11 @@ from app.api import api_messages
 from app.core.config import get_settings
 from app.main import app
 from app.models import RefreshToken, User
-
 from app.tests.test_auth.token_tests_helper import (
-    check_refresh_token, check_token_expire_time,
-    validate_token_response
-    )
+    check_refresh_token,
+    check_token_expire_time,
+    validate_token_response,
+)
 
 
 @pytest.mark.asyncio(loop_scope="session")
