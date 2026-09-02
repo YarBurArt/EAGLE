@@ -1,20 +1,24 @@
 """ Module for unified interface to LLM services """
 import os
+from typing import Any
 
 import g4f
+import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException
-from ollama import Client
+from ollama import AsyncClient
 
 from app.core.llm_templ import LLMTemplates
 
-# Настройка g4f
-g4f.debug.logging = True
+g4f.debug.logging = False
 
 load_dotenv()
-IS_LOCAL_LLM: int = os.getenv('LLMSERVICE__LOCAL')
+IS_LOCAL_LLM: int = int(os.getenv('LLMSERVICE__LOCAL', '0') or '0')
 if IS_LOCAL_LLM == 1:
-    client_ollama = Client(host=os.getenv('LLMSERVICE__API_URL'))
+    client_ollama = AsyncClient(
+        host=os.getenv('LLMSERVICE__API_URL', 'http://localhost:11434'),
+        timeout=httpx.Timeout(connect=5, read=120, write=10, pool=5),
+    )
 else:
     client_ollama = None
 
@@ -27,48 +31,76 @@ class LLMService:
             "you": g4f.Provider.You,
         }
 
-    async def query_llm(self, prompt: str, provider_name: str = None) -> str:
+    async def query_llm(self, prompt: str, provider_name: str | None = None) -> str:
         """
         Отправляет запрос к бесплатным LLM через g4f
         """
-        # TODO: support custom system prompt
         try:
             if IS_LOCAL_LLM == 1:
-                res: str = self._local_llm(prompt)
-            else:
-                res: str = await self._g4f_llm(prompt, provider_name)
-            return res
+                return await self._local_llm(prompt)
+            return await self._g4f_llm(prompt, provider_name)
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(
-                status_code=500, detail=f"Ошибка при запросе к LLM: {str(e)}"
+                status_code=500, detail=f"LLM request failed: {str(e)}"
             ) from e
 
-    def _local_llm(self, prompt: str) -> str:
-        """ query with local llm ollama """
-        res: dict = client_ollama.generate(
-            model=os.getenv('LLMSERVICE__DEFAULT_MODEL'),
-            prompt=prompt, system=LLMTemplates.SYSTEM_PROMT
+    async def query_llm_chat(
+        self, messages: list[dict[str, Any]], provider_name: str | None = None
+    ) -> str:
+        """Multi-turn chat query supporting both local and g4f backends."""
+        try:
+            if IS_LOCAL_LLM == 1:
+                return await self._local_llm_chat(messages)
+            return await self._g4f_llm_chat(messages, provider_name)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"LLM chat request failed: {str(e)}"
+            ) from e
+
+    @staticmethod
+    async def _local_llm(prompt: str) -> str:
+        """Query local Ollama with a single prompt."""
+        res = await client_ollama.generate(
+            model=os.getenv('LLMSERVICE__DEFAULT_MODEL', 'mistral'),
+            prompt=prompt,
+            system=LLMTemplates.SYSTEM_PROMT,
         )
-        # remove think text for deepseek-r1, qwen , qwq models
+        # remove think text for deepseek-r1, qwen, qwq models
         parts_th = res.response.rsplit('</think>', 1)
         return parts_th[-1] if len(parts_th) > 1 else res.response
 
-    async def _g4f_llm(self, prompt: str, provider_name: str) -> str:
-        """ query with g4f proxy providers like DDG """
-        # Если указан провайдер, используем его
+    @staticmethod
+    async def _local_llm_chat(
+            messages: list[dict[str, Any]]
+    ) -> str:
+        """Query local Ollama with multi-turn message history."""
+        res = await client_ollama.chat(
+            model=os.getenv('LLMSERVICE__DEFAULT_MODEL', 'mistral'),
+            messages=messages,
+        )
+        text = res.message.content or ""
+        parts_th = text.rsplit('</think>', 1)
+        return parts_th[-1] if len(parts_th) > 1 else text
+
+    async def _g4f_llm(self, prompt: str, provider_name: str | None) -> str:
+        """Query g4f proxy providers like DDG"""
         if provider_name and provider_name in self.providers:
             provider = self.providers[provider_name]
             try:
                 response = await g4f.ChatCompletion.create_async(
                     model=g4f.models.default,
                     messages=[{"role": "user", "content": prompt}],
-                    provider=provider
+                    provider=provider,
                 )
                 return response
             except Exception as e:
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Provider {provider_name} failed: {str(e)}"
+                    detail=f"Provider {provider_name} failed: {str(e)}",
                 ) from e
 
         # Если провайдер не указан или не найден, пробуем разные
@@ -77,16 +109,47 @@ class LLMService:
                 response = await g4f.ChatCompletion.create_async(
                     model=g4f.models.default,
                     messages=[{"role": "user", "content": prompt}],
-                    provider=provider
+                    provider=provider,
                 )
                 if response and len(response) > 0:
                     return response
-            except Exception as e:
-                print(f"Provider {name} failed: {e}")
+            except Exception:
                 continue
 
-        return "Не удалось получить ответ от ни одного провайдера"
+        return "No response from any LLM provider"
+
+    async def _g4f_llm_chat(
+        self, messages: list[dict[str, Any]], provider_name: str | None
+    ) -> str:
+        """Query g4f with phase message history"""
+        if provider_name and provider_name in self.providers:
+            provider = self.providers[provider_name]
+            try:
+                response = await g4f.ChatCompletion.create_async(
+                    model=g4f.models.default,
+                    messages=messages,
+                    provider=provider,
+                )
+                return response
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Provider {provider_name} failed: {str(e)}",
+                ) from e
+
+        for name, provider in self.providers.items():
+            try:
+                response = await g4f.ChatCompletion.create_async(
+                    model=g4f.models.default,
+                    messages=messages,
+                    provider=provider,
+                )
+                if response and len(response) > 0:
+                    return response
+            except Exception:
+                continue
+
+        return "No response from any LLM provider"
 
 
-# Инициализация сервиса
 llm_service = LLMService()

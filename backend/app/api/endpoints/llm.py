@@ -1,12 +1,9 @@
 """
 Module only for llm endpoints
 to simplify the creation of a chain relative to the user
-idk what is g4f.gui.run_gui()
 """
 import json
-from typing import Any
 
-import g4f  # temp
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,14 +18,13 @@ from app.models import (
     User,
 )
 from app.schemas.requests import (
+    ChatRequest,
     CodeAnalysisRequest,
     PayloadRequest,
     QueryRequest,
     SuggestActionRequest,
 )
-from app.schemas.responses import (
-    SuggestActionResponse,
-)
+from app.schemas.responses import SuggestActionResponse
 
 router = APIRouter()
 
@@ -210,39 +206,19 @@ async def get_providers():
 
 
 @router.post("/chat", description="Chat with llm in context of chain")
-async def chat_conversation(messages: dict[str, Any]):
+async def chat_conversation(req: ChatRequest):
     """
     Эндпоинт для ведения диалога
     """
-    try:
-        chat_messages = messages.get("messages", [])
-        if not chat_messages:
-            raise HTTPException(
-                status_code=400, detail="message massive needed"
-            )
-
-        for name, provider in llm_service.providers.items():
-            try:
-                response = await g4f.ChatCompletion.create_async(
-                    model=g4f.models.default,
-                    messages=chat_messages,
-                    provider=provider
-                )
-                if response and len(response) > 0:
-                    return {
-                        "success": True,
-                        "response": response,
-                        "provider": name
-                    }
-            except Exception as e:
-                print(f"Provider {name} failed: {e}")
-                continue
-
+    if not req.messages:
         raise HTTPException(
-            status_code=500, detail="no response from providers"
+            status_code=400, detail="messages list is required"
         )
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"dialog error: {str(e)}"
-        ) from e  # to track traceback
+    result = await llm_service.query_llm_chat(
+        req.messages, req.provider
+    )
+    return {
+        "success": True,
+        "response": result,
+    }

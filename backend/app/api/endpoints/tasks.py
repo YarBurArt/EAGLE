@@ -31,6 +31,7 @@ from app.cmd.proc import (
     process_approved_cmd,
     process_new_callback,
 )
+from app.core import database_session
 from app.core.config import phases
 from app.models import Agent, AttackChain, AttackStep, CurrentAttackPhase, User
 from app.schemas.requests import (
@@ -135,7 +136,7 @@ async def run_local_command(
     chain_name, chain_id, phase_name = await get_chain_n_phase(
         session, data.chain_name, current_user
     )
-    # zero agent must be already deployed, thats why we need display id
+    # zero agent must be already deployed, that's why we need display id
     step, llm_a = await check_and_process_local_cmd(
         data.command, data.callback_display_id, chain_id, phase_name)
     # add attack step with phase
@@ -489,26 +490,26 @@ chain_controller = ChainController()
 
 async def perform_chain_step(
     steps: list[AttackStep], zero_display_id: int,
-    session: AsyncSession, cancel_event: asyncio.Event
+    cancel_event: asyncio.Event,
 ) -> dict:
-    """ generator to yield result of each step """
-    for step in steps:
-        if cancel_event.is_set():  # check asyncio.Event status
-            print("\nINFO [-] chain is cancel\n")
-            break
-        res_agent = await session.execute(
-            select(Agent).where(
-                Agent.step_id == step.id
+    """generator to yield result of each step"""
+    async with database_session.get_async_session() as session:
+        for step in steps:
+            if cancel_event.is_set():
+                break
+            res_agent = await session.execute(
+                select(Agent).where(
+                    Agent.step_id == step.id
+                )
             )
-        )
-        c_agent: Agent = res_agent.scalars().first()
+            c_agent: Agent = res_agent.scalars().first()
         if c_agent:
             display_id = c_agent.callback_display_id
             p_os_type = c_agent.os_type
         else:
             display_id = zero_display_id
             p_os_type = "Windows"  # cuz most popular target
-        # _ is new agent what we dont need
+        # _ is new agent what we don't need
         result, llm_a, _ = await process_approved_cmd(
             cmd=step.command, chain_id=step.chain_id,
             tool_name=step.tool_name, phase_name=step.phase,
@@ -562,7 +563,7 @@ async def run_chain(
     chain_controller.active_chains[chain_id] = cancel_event
     return StreamingResponse(
         perform_chain_step(
-            f_sorted_steps, zero_display_id, session, cancel_event
+            f_sorted_steps, zero_display_id, cancel_event
         ),
         media_type="application/json"
     )

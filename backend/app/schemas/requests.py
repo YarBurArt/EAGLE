@@ -86,6 +86,11 @@ class PayloadRequest(BaseModel):
 
 
 class SuggestActionRequest(BaseRequest):
-    p_command: str | None = "just analyze last steps and tell me what to do next"  # | None
+    p_command: str | None = "just analyze last steps and tell me what to do next"
     chain_id: int
     display_id: int
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict[str, str]]
+    provider: str | None = None
