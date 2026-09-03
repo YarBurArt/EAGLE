@@ -36,7 +36,7 @@ class NewPayloadOutput(BaseModel):
 class MythicClient:
     """Mythic C2 connection and operations"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._instance = None
 
     @property

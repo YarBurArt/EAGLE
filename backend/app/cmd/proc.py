@@ -156,6 +156,7 @@ async def check_and_process_agent_cmd(
     ctx: ChainContext,
     cmd: str,
     mythic_client: MythicClient,
+    no_llm_analysis: bool = False,
 ) -> tuple[AttackStep, str, Agent]:
     """run commands on agent and return output based on tool"""
     _, tool_n = cb.tool_name.split("_", 1)
@@ -173,7 +174,11 @@ async def check_and_process_agent_cmd(
             " but you can bypass this issue using agent commands"
             " and shell scripts for long time tasks.",
         ) from e
-    llm_analysis = await analyze_command_output_with_llm(result.output, cmd)
+    llm_analysis = (
+        ""
+        if no_llm_analysis
+        else await analyze_command_output_with_llm(result.output, cmd)
+    )
     # for reproducibility
     rhost, agent_os, agent_status = await mythic_client.get_os_by_display_id(
         cb.display_id
@@ -247,6 +252,7 @@ async def check_and_process_local_cmd(
     display_id: int,
     ctx: ChainContext,
     mythic_client: MythicClient,
+    no_llm_analysis: bool = False,
 ) -> tuple[AttackStep, str]:
     """async function for check is safe command ->
     execute on zero agent, formatting to AttackStep"""
@@ -263,7 +269,11 @@ async def check_and_process_local_cmd(
             " but you can bypass this issue using bash scripts"
             " for long time tasks.",
         ) from e
-    llm_analysis = await analyze_command_output_with_llm(ex_result.output, cmd)
+    llm_analysis = (
+        ""
+        if no_llm_analysis
+        else await analyze_command_output_with_llm(ex_result.output, cmd)
+    )
 
     attack_step = AttackStep(
         chain_id=ctx.chain_id,

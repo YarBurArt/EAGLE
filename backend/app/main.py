@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
 from app.api.deps import ChainController
+from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
 from app.core.config import DEBUG_MODE_C  # , get_settings,
 
@@ -54,6 +55,12 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(api_router)
+
+# MCP endpoint at /mcp (Streamable HTTP transport)
+app.mount(
+    "/mcp",
+    eagle_mcp.streamable_http_app(streamable_http_path="/"),
+)
 
 # Sets all CORS enabled origins
 app.add_middleware(

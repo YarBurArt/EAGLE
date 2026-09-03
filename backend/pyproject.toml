@@ -20,6 +20,7 @@ sqlalchemy = { extras = ["asyncio"], version = "^2.0.41" }
 mythic = "0.3.0rc8"
 gql = "==4.0.0"
 python-dotenv = "^1.1.0"
+mcp = ">=2.0"
 autopep8 = "^2.3.2"
 g4f = "==8.2.6"
 ollama = "==0.6.2"
