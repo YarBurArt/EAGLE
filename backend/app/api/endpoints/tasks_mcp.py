@@ -1,5 +1,6 @@
 """
 MCP server exposing EAGLE main tasks for LLM agents
+based on this https://github.com/SkinwalkerSec/AI-Tooling (MIT license)
 """
 
 from __future__ import annotations
