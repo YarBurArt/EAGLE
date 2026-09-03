@@ -156,7 +156,7 @@ async def check_and_process_agent_cmd(
     ctx: ChainContext,
     cmd: str,
     mythic_client: MythicClient,
-) -> tuple[AttackStep, str]:
+) -> tuple[AttackStep, str, Agent]:
     """run commands on agent and return output based on tool"""
     _, tool_n = cb.tool_name.split("_", 1)
     assert cmd not in UNSAFE_CMD
@@ -234,10 +234,12 @@ async def check_and_create_mpayload(
     ), llm_analysis
 
 
-async def get_agent_status(callback_display_id, mythic_client: MythicClient):
+async def get_agent_status(
+    callback_display_id: int, mythic_client: MythicClient
+) -> str:
     """maybe process status, like if fail -> restart agent in chain"""
-    status = await mythic_client.check_status(callback_display_id)
-    return status
+    agent_status = await mythic_client.check_status(callback_display_id)
+    return agent_status
 
 
 async def check_and_process_local_cmd(
@@ -304,7 +306,7 @@ async def is_command_allowed_in_phase(
     os_type: str,
     mythic_client: MythicClient,
 ) -> bool:
-    """check command for allowed, we dont want to ransomware"""
+    """check command for allowed, we don't want to ransomware"""
     allowed_commands = get_commands_for_phase(phase_name)
 
     # Get additional allowed commands based on payload type and OS

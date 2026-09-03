@@ -96,7 +96,7 @@ class AttackStep(Base):
     __tablename__ = "attack_step"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    chain_id: Mapped[str] = mapped_column(
+    chain_id: Mapped[int] = mapped_column(
         ForeignKey("attack_chain.id", ondelete="CASCADE"),
     )
     # each step has a specific phase, which can differs from the current
@@ -145,7 +145,7 @@ class Agent(Base):
     __tablename__ = "agent"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    step_id: Mapped[str] = mapped_column(
+    step_id: Mapped[int] = mapped_column(
         ForeignKey("attack_step.id", ondelete="CASCADE"),
     )
     agent_name: Mapped[str] = mapped_column(String(256), nullable=False, unique=False)
