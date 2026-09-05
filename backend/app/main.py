@@ -16,9 +16,11 @@ from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
 from app.api.deps import ChainController
+from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
-from app.core.config import DEBUG_MODE_C  # , get_settings,
+from app.core.config import DEBUG_MODE_C, get_settings
+from app.mitre_loader import load_attack_graph
 
 
 @asynccontextmanager
@@ -34,6 +36,19 @@ async def lifespan(app: FastAPI):
         )
     app.state.mythic_client = mythic_client
     app.state.chain_controller = ChainController()
+
+    # load MITRE ATT&CK data for TTP queries in MCP
+    settings = get_settings()
+    try:
+        graph = load_attack_graph(
+            settings.mitre.enterprise_attack_path,
+            settings.mitre.threat_groups_path,
+        )
+        app.state.attack_graph = graph
+        tasks_mcp._attack_graph = graph
+    except Exception as e:
+        print("\033[1;33mWARNING:   \033[0mMITRE data load failed:", e)
+        app.state.attack_graph = None
 
     yield
 

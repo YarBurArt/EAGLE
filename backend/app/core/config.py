@@ -75,14 +75,21 @@ class LLMservice(BaseModel):
     default_model: str = "mistral"
 
 
+class Mitre(BaseModel):
+    """env format like MITRE__ENTERPRISE_ATTACK_PATH=..."""
+
+    enterprise_attack_path: Path = PROJECT_DIR / "data" / "enterprise-attack.json"
+    threat_groups_path: Path = PROJECT_DIR / "data" / "threat-groups.json"
+
+
 class Settings(BaseSettings):
     """only to validate settings by pydantic"""
 
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
     mythic: Mythic = Field(default_factory=Mythic)
-    # if no vars in .env -> take from factory
     llmservice: LLMservice = Field(default_factory=LLMservice)
+    mitre: Mitre = Field(default_factory=Mitre)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

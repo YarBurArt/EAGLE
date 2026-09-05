@@ -24,6 +24,7 @@ from app.services.c2_service import CommandsC2ExecService
 from app.services.chain_exec_service import ChainExecutionService
 from app.services.chain_service import ChainService
 from app.services.payload_service import AgentPayloadService
+from app.services.ttp_info_service import TTPInfoService
 
 mcp = MCPServer(
     "EAGLE MCP",
@@ -53,6 +54,7 @@ class ToolContext:
 _auth = AuthState()
 _ctx: ToolContext | None = None
 _ctx_lock = asyncio.Lock()
+_attack_graph = None  # loaded startup from main.py
 
 
 def _env(name: str) -> str:
@@ -100,6 +102,11 @@ async def _get_ctx() -> ToolContext:
             raise RuntimeError(f"User {payload.sub} not found after auth")
         _ctx = ToolContext(mythic=mythic, user=user)
     return _ctx
+
+
+def _get_ttp_service() -> TTPInfoService:
+    assert _attack_graph is not None, "MITRE ATT&CK data not loaded at startup"
+    return TTPInfoService(_attack_graph)
 
 
 @mcp.tool()
@@ -363,3 +370,59 @@ async def execute_action(
         },
         "llm_analysis": str(result["llm_analysis"]),
     }
+
+
+@mcp.tool()
+async def get_ttps_by_apt(apt_mitre_id: str) -> list[dict[str, Any]]:
+    """Get all MITRE ATT&CK techniques used by a specific APT group (like G0016, G0007). Returns list of TTPs with mitre_id, name, description, and extended Unified Kill Chain phase mapping."""
+    svc = _get_ttp_service()
+    ttps = svc.get_ttps_by_apt(apt_mitre_id)
+    return [
+        {
+            "mitre_id": t.mitre_id,
+            "name": t.name,
+            "description": t.description[:500] if t.description else "",
+            "tactic_ids": t.tactic_ids,
+        }
+        for t in ttps
+    ]
+
+
+@mcp.tool()
+async def get_ttp_info(ttp_mitre_id: str) -> dict[str, Any]:
+    """Get full details for a MITRE ATT&CK technique (like T1566, T1059). Returns name, description, references, tactic_ids, and which UKC phase it maps to."""
+    svc = _get_ttp_service()
+    ttp = svc.get_ttp_info(ttp_mitre_id)
+    if ttp is None:
+        return {"error": f"Technique {ttp_mitre_id} not found"}
+    return {
+        "mitre_id": ttp.mitre_id,
+        "name": ttp.name,
+        "description": ttp.description,
+        "references": ttp.references,
+        "tactic_ids": ttp.tactic_ids,
+        "ukc_phases": svc.get_phase_for_ttp(ttp_mitre_id),
+    }
+
+
+@mcp.tool()
+async def get_phase_techniques(phase_name: str) -> list[dict[str, Any]]:
+    """List all MITRE ATT&CK techniques that map to a UKC phase (like 'Reconnaissance', 'Persistence', 'Lateral Movement'). Returns technique IDs, names, and descriptions."""
+    svc = _get_ttp_service()
+    ttps = svc.get_ttps_by_phase(phase_name)
+    return [
+        {
+            "mitre_id": t.mitre_id,
+            "name": t.name,
+            "description": t.description[:500] if t.description else "",
+        }
+        for t in ttps
+    ]
+
+
+@mcp.tool()
+async def get_chain_phases() -> list[dict[str, str]]:
+    """List all 18 Unified Kill Chain phases with descriptions. Use this to understand the full modern attack lifecycle from Reconnaissance to Objectives."""
+    async with database_session.get_async_session() as session:
+        chain_svc = ChainService(session)
+        return await chain_svc.get_possible_phases()

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import phases
 from app.models import AttackChain, AttackStep, CurrentAttackPhase, User
+from app.services.ttp_info_service import UKC_PHASE_DESCRIPTIONS
 
 
 class ChainService:
@@ -173,3 +174,18 @@ class ChainService:
             .limit(1)
         )
         return res_l_step.scalars().first()
+
+    @staticmethod
+    async def get_possible_phases() -> list[dict[str, str]]:
+        return [
+            {"name": p, "description": UKC_PHASE_DESCRIPTIONS.get(p, "")}
+            for p in phases
+        ]
+
+    @staticmethod
+    async def get_ukc_phase_description(phase_name: str) -> str:
+        if phase_name not in phases:
+            raise HTTPException(
+                status_code=400, detail="Unknown phase, check UCKC phases"
+            )
+        return UKC_PHASE_DESCRIPTIONS.get(phase_name, "")
