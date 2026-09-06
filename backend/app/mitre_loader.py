@@ -2,12 +2,15 @@
 MITRE ATT&CK STIX bundle loader.
 Streams the enterprise-attack.json with ijson to build an in-memory
 AttackGraph of APTs and TTPs linked via "uses" relationships.
+Also builds APTChainIndex from TTPs uses patterns across APT campaigns
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -40,6 +43,29 @@ class TTP:
 class AttackGraph:
     apts: dict[str, APT]
     ttps: dict[str, TTP]
+
+
+@dataclass(frozen=True)
+class SuggestedTechnique:
+    mitre_id: str
+    name: str
+    apt_count: int  # count APT ttp chains behavior
+    ukc_phases: list[str] = field(default_factory=list)
+
+
+@dataclass
+class APTChainIndex:
+    """for TTP chains ranked by APT frequency"""
+
+    _index: dict[str, list[SuggestedTechnique]]
+    _ttps: dict[str, TTP]
+
+    def suggest(self, mitre_id: str, limit: int = 10) -> list[SuggestedTechnique]:
+        return self.get_all(mitre_id)[:limit]
+
+    def get_all(self, mitre_id: str) -> list[SuggestedTechnique]:
+        """all uses techniques for mitre_id, ranked by APT co-use frequency"""
+        return list(self._index.get(mitre_id, []))
 
 
 _COUNTRY_CODES: dict[str, str] = {
@@ -196,3 +222,51 @@ def load_attack_graph(mitre_path: Path, thg_cards_path: Path) -> AttackGraph:
 
     logger.info("loaded %d APTs, %d TTPs", len(apts), len(ttps))
     return AttackGraph(apts=apts, ttps=ttps)
+
+
+def build_apt_chain_index(
+    graph: AttackGraph,
+    phase_resolver: Callable[[str], list[str]],
+) -> APTChainIndex:
+    """
+    For each ttp, find all APT that use it, then count which
+    other techniques those APT also use in order. Ranked by frequency descending.
+    """
+    pair_count: dict[tuple[str, str], int] = defaultdict(int)
+
+    for apt in graph.apts.values():
+        techs = [t for t in apt.technique_ids if t in graph.ttps]
+        for i, t1 in enumerate(techs):
+            for t2 in techs[i + 1 :]:
+                pair = (t1, t2) if t1 < t2 else (t2, t1)
+                pair_count[pair] += 1
+
+    # per technique
+    raw: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for (t1, t2), count in pair_count.items():
+        raw[t1][t2] = count
+        raw[t2][t1] = count
+
+    # resolve UKC phases
+    phase_cache: dict[str, list[str]] = {}
+    for mitre_id in raw:
+        phase_cache[mitre_id] = phase_resolver(mitre_id)
+
+    # build sorted suggestions TTP to TTPs based on APT and UKC
+    index: dict[str, list[SuggestedTechnique]] = {}
+    for mitre_id, others in raw.items():
+        sorted_others = sorted(others.items(), key=lambda x: x[1], reverse=True)
+        suggestions = []
+        for other_id, apt_count in sorted_others:
+            suggestions.append(
+                SuggestedTechnique(
+                    mitre_id=other_id,
+                    name=graph.ttps[other_id].name,
+                    apt_count=apt_count,
+                    ukc_phases=phase_cache.get(other_id, []),
+                )
+            )
+        index[mitre_id] = suggestions
+
+    logger.info("built apt_chain_index with %d entries", len(index))
+    return APTChainIndex(_index=index, _ttps=graph.ttps)

@@ -6,7 +6,13 @@ Check UKC from https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pd
 
 from __future__ import annotations
 
-from app.mitre_loader import TTP, AttackGraph
+from typing import Any
+
+from app.core.config import phases
+from app.mitre_loader import TTP, APTChainIndex, AttackGraph
+
+# unknown names sort before all phases
+_PHASE_IDX: dict[str, int] = {p: i for i, p in enumerate(phases)}
 
 UKC_PHASE_DESCRIPTIONS: dict[str, str] = {
     "Reconnaissance": (
@@ -148,8 +154,13 @@ def _phase_matches_technique(phase_name: str, ttp: TTP) -> bool:
 class TTPInfoService:
     """for MITRE ATT&CK techniques and map them to UKC"""
 
-    def __init__(self, graph: AttackGraph) -> None:
+    def __init__(
+        self,
+        graph: AttackGraph,
+        chain_index: APTChainIndex | None = None,
+    ) -> None:
         self._graph = graph
+        self._chain_index = chain_index
 
     def get_ttps_by_apt(self, apt_mitre_id: str) -> list[TTP]:
         """all TTPs used by given APT"""
@@ -174,10 +185,14 @@ class TTPInfoService:
         result: list[TTP] = []
 
         for ttp in self._graph.ttps.values():
-            if not tactic_set.intersection(ttp.tactic_ids):
+            matched_tactics = tactic_set.intersection(ttp.tactic_ids)
+            if not matched_tactics:
                 continue
             # clarify phases that share a tactic
-            if len(tactic_ids) > 1 and not _phase_matches_technique(phase_name, ttp):
+            shared_tactic = any(
+                len(ATTACK_TACTIC_TO_UKC.get(t, [])) > 1 for t in matched_tactics
+            )
+            if shared_tactic and not _phase_matches_technique(phase_name, ttp):
                 continue
             result.append(ttp)
 
@@ -189,20 +204,83 @@ class TTPInfoService:
             return []
 
         matched: list[str] = []
-        for phase_name, tactics in ATTACK_TACTIC_TO_UKC.items():
-            if not set(tactics).intersection(ttp.tactic_ids):
+        ttp_tactics = set(ttp.tactic_ids)
+        for tactic, ukc_phases in ATTACK_TACTIC_TO_UKC.items():
+            if tactic not in ttp_tactics:
                 continue
-            if len(tactics) > 1 and not _phase_matches_technique(phase_name, ttp):
-                continue
-            matched.append(phase_name)
+            if len(ukc_phases) > 1:
+                # tactic shared by several UKC phases
+                matched.extend(
+                    p for p in ukc_phases if _phase_matches_technique(p, ttp)
+                )
+            else:
+                matched.extend(ukc_phases)
 
         return matched
+
+    def suggest_next_ttps(
+        self,
+        current_mitre_id: str,
+        limit: int = 10,
+        same_phase_only: bool = False,
+        target_phase: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """suggest next techniques based on APT/TTP patterns"""
+        if self._chain_index is None:
+            return []
+
+        current_ttp = self._graph.ttps.get(current_mitre_id)
+        if current_ttp is None:
+            return []
+
+        current_phases = self.get_phase_for_ttp(current_mitre_id)
+        if not current_phases:
+            return []
+
+        # current phase index = max index current UKC phases
+        current_phase_idx = max(_PHASE_IDX.get(p, -1) for p in current_phases)
+
+        suggestions = self._chain_index.get_all(current_mitre_id)
+
+        results: list[dict[str, Any]] = []
+        for s in suggestions:
+            # reject if suggested phases before current phase
+            suggested_max_idx = (
+                max(_PHASE_IDX.get(p, -1) for p in s.ukc_phases) if s.ukc_phases else -1
+            )
+            if suggested_max_idx < current_phase_idx:
+                continue
+
+            # reject if no overlap with current phases
+            if same_phase_only:
+                if not set(s.ukc_phases).intersection(current_phases):
+                    continue
+            if target_phase and target_phase not in s.ukc_phases:
+                continue
+
+            ttp = self._graph.ttps.get(s.mitre_id)
+            results.append(
+                {
+                    "mitre_id": s.mitre_id,
+                    "name": s.name,
+                    "description": ttp.description[:300]
+                    if ttp and ttp.description
+                    else "",
+                    "apt_chain_count": s.apt_count,
+                    "ukc_phases": s.ukc_phases,
+                }
+            )
+
+            if len(results) >= limit:
+                break
+
+        return results
 
     @staticmethod
     def _get_tactics_for_phase(phase_name: str) -> list[str]:
         # invert the mapping: find which tactics belong to this phase
         result: list[str] = []
-        for tactic, phases in ATTACK_TACTIC_TO_UKC.items():
-            if phase_name in phases:
+        for tactic, tactic_phases in ATTACK_TACTIC_TO_UKC.items():
+            if phase_name in tactic_phases:
                 result.append(tactic)
         return result

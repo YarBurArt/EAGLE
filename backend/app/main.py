@@ -20,11 +20,10 @@ from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
 from app.core.config import DEBUG_MODE_C, get_settings
-from app.mitre_loader import load_attack_graph
+from app.mitre_loader import build_apt_chain_index, load_attack_graph
+from app.services.ttp_info_service import TTPInfoService
 
-# Initialize the MCP streamable HTTP session manager early so the
-# lifespan function can reference it. The returned Starlette sub-app
-# is discarded — we mount only the raw ASGI handler below.
+# mount only the raw ASGI handler for mcp
 eagle_mcp.streamable_http_app(streamable_http_path="/")
 _mcp_session_manager = eagle_mcp._lowlevel_server._session_manager
 
@@ -52,9 +51,16 @@ async def lifespan(app: FastAPI):
         )
         app.state.attack_graph = graph
         tasks_mcp._attack_graph = graph
+
+        # build APT co-use chain index for suggest_next_ttps
+        _ttp_svc = TTPInfoService(graph)
+        chain_index = build_apt_chain_index(graph, _ttp_svc.get_phase_for_ttp)
+        app.state.apt_chain_index = chain_index
+        tasks_mcp._apt_chain_index = chain_index
     except Exception as e:
         print("\033[1;33mWARNING:   \033[0mMITRE data load failed:", e)
         app.state.attack_graph = None
+        app.state.apt_chain_index = None
 
     # required for streamable HTTP in mcp
     async with _mcp_session_manager.run():

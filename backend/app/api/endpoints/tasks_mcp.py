@@ -54,7 +54,9 @@ class ToolContext:
 _auth = AuthState()
 _ctx: ToolContext | None = None
 _ctx_lock = asyncio.Lock()
-_attack_graph = None  # loaded startup from main.py
+# loaded startup from main.py
+_attack_graph = None
+_apt_chain_index = None
 
 
 def _env(name: str) -> str:
@@ -106,7 +108,7 @@ async def _get_ctx() -> ToolContext:
 
 def _get_ttp_service() -> TTPInfoService:
     assert _attack_graph is not None, "MITRE ATT&CK data not loaded at startup"
-    return TTPInfoService(_attack_graph)
+    return TTPInfoService(_attack_graph, _apt_chain_index)
 
 
 @mcp.tool()
@@ -418,6 +420,23 @@ async def get_phase_techniques(phase_name: str) -> list[dict[str, Any]]:
         }
         for t in ttps
     ]
+
+
+@mcp.tool()
+async def suggest_next_ttps(
+    current_mitre_id: str,
+    limit: int = 10,
+    same_phase_only: bool = False,
+    target_phase: str | None = None,
+) -> list[dict[str, Any]]:
+    """Suggest next MITRE ATT&CK techniques based on co-use patterns from real APT campaigns. Never suggests techniques from previous UKC phases. Use this to plan the next step in an attack chain emulation."""
+    svc = _get_ttp_service()
+    return svc.suggest_next_ttps(
+        current_mitre_id=current_mitre_id,
+        limit=limit,
+        same_phase_only=same_phase_only,
+        target_phase=target_phase,
+    )
 
 
 @mcp.tool()
