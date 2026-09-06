@@ -22,6 +22,12 @@ from app.cmd.c2_tool import MythicClient
 from app.core.config import DEBUG_MODE_C, get_settings
 from app.mitre_loader import load_attack_graph
 
+# Initialize the MCP streamable HTTP session manager early so the
+# lifespan function can reference it. The returned Starlette sub-app
+# is discarded — we mount only the raw ASGI handler below.
+eagle_mcp.streamable_http_app(streamable_http_path="/")
+_mcp_session_manager = eagle_mcp._lowlevel_server._session_manager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,7 +56,9 @@ async def lifespan(app: FastAPI):
         print("\033[1;33mWARNING:   \033[0mMITRE data load failed:", e)
         app.state.attack_graph = None
 
-    yield
+    # required for streamable HTTP in mcp
+    async with _mcp_session_manager.run():
+        yield
 
     await mythic_client.disconnect()
 
@@ -71,11 +79,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(api_router)
 
-# MCP endpoint at /mcp (Streamable HTTP transport)
-app.mount(
-    "/mcp",
-    eagle_mcp.streamable_http_app(streamable_http_path="/"),
-)
+app.mount("/mcp", _mcp_session_manager.asgi_app)
 
 # Sets all CORS enabled origins
 app.add_middleware(
