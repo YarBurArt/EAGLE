@@ -2,6 +2,7 @@
 Module that handles all responsibilities and endpoints
 that related to authentication, access tokens, registration
 """
+
 import secrets
 import time
 from typing import Any
@@ -30,10 +31,7 @@ ACCESS_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     400: {
         "description": "Invalid email or password",
         "content": {
-            "application/json": {"example": {
-                "detail": api_messages.PASSWORD_INVALID
-            }
-            }
+            "application/json": {"example": {"detail": api_messages.PASSWORD_INVALID}}
         },
     },
 }
@@ -46,15 +44,11 @@ REFRESH_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
                 "examples": {
                     "refresh token expired": {
                         "summary": api_messages.REFRESH_TOKEN_EXPIRED,
-                        "value": {
-                            "detail": api_messages.REFRESH_TOKEN_EXPIRED
-                            },
+                        "value": {"detail": api_messages.REFRESH_TOKEN_EXPIRED},
                     },
                     "refresh token already used": {
                         "summary": api_messages.REFRESH_TOKEN_ALREADY_USED,
-                        "value": {
-                            "detail": api_messages.REFRESH_TOKEN_ALREADY_USED
-                            },
+                        "value": {"detail": api_messages.REFRESH_TOKEN_ALREADY_USED},
                     },
                 }
             }
@@ -76,14 +70,14 @@ REFRESH_TOKEN_RESPONSES: dict[int | str, dict[str, Any]] = {
     response_model=AccessTokenResponse,
     responses=ACCESS_TOKEN_RESPONSES,
     description="OAuth2 compatible token, get an access token "
-                "for future requests using username and password",
+    "for future requests using username and password",
 )
 async def login_access_token(
     session: AsyncSession = Depends(deps.get_session),
     form_data: OAuth2PasswordRequestForm = Depends(),
 ) -> AccessTokenResponse:
-    """ get user by email -> compare hashed password
-        return jwt token """
+    """get user by email -> compare hashed password
+    return jwt token"""
     query = select(User).where(User.email == form_data.username)
     user = await session.scalar(query)
 
@@ -107,9 +101,7 @@ async def login_access_token(
     refresh_token_new = RefreshToken(
         user_id=user.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(
-            time.time() +
-            get_settings().security.refresh_token_expire_secs),
+        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token_new)
     await session.commit()
@@ -127,13 +119,13 @@ async def login_access_token(
     response_model=AccessTokenResponse,
     responses=REFRESH_TOKEN_RESPONSES,
     description="OAuth2 compatible token, get an access token"
-                "for future requests using refresh token",
+    "for future requests using refresh token",
 )
 async def refresh_token(
     data: RefreshTokenRequest,
     session: AsyncSession = Depends(deps.get_session),
 ) -> AccessTokenResponse:
-    """ if user authenticated, check and return refresh jwt token """
+    """if user authenticated, check and return refresh jwt token"""
     token = await session.scalar(
         select(RefreshToken)
         .where(RefreshToken.refresh_token == data.refresh_token)
@@ -165,9 +157,7 @@ async def refresh_token(
     refresh_token_new = RefreshToken(
         user_id=token.user_id,
         refresh_token=secrets.token_urlsafe(32),
-        exp=int(
-            time.time() +
-            get_settings().security.refresh_token_expire_secs),
+        exp=int(time.time() + get_settings().security.refresh_token_expire_secs),
     )
     session.add(refresh_token_new)
     await session.commit()
@@ -190,7 +180,7 @@ async def register_new_user(
     new_user: UserCreateRequest,
     session: AsyncSession = Depends(deps.get_session),
 ) -> User:
-    """ register new user by just unique email and password """
+    """register new user by just unique email and password"""
     query = select(User).where(User.email == new_user.email)
     user = await session.scalar(query)
     if user is not None:

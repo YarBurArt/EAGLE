@@ -2,6 +2,7 @@
 Module for test jwt refresh token scenarios, their correct http response
 in the context of a user one-time authentication
 """
+
 import time
 
 import pytest
@@ -15,11 +16,11 @@ from app.api import api_messages
 from app.core.config import get_settings
 from app.main import app
 from app.models import RefreshToken, User
-
 from app.tests.test_auth.token_tests_helper import (
-    check_refresh_token, check_token_expire_time,
-    validate_token_response
-    )
+    check_refresh_token,
+    check_token_expire_time,
+    validate_token_response,
+)
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -85,8 +86,7 @@ async def test_refresh_token_fails_with_message_when_token_is_used(
     )
 
     assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert response.json() == {
-        "detail": api_messages.REFRESH_TOKEN_ALREADY_USED}
+    assert response.json() == {"detail": api_messages.REFRESH_TOKEN_ALREADY_USED}
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -194,7 +194,9 @@ async def test_refresh_token_success_jwt_has_valid_expire_time(
 
     assert check_token_expire_time(
         response.json(),
-        get_settings().security.jwt_access_token_expire_secs, "expires_at")
+        get_settings().security.jwt_access_token_expire_secs,
+        "expires_at",
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -249,7 +251,8 @@ async def test_refresh_token_success_refresh_token_has_valid_expire_time(
     assert check_token_expire_time(
         response.json(),
         get_settings().security.refresh_token_expire_secs,
-        "refresh_token_expires_at")
+        "refresh_token_expires_at",
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")

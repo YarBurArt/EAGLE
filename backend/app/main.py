@@ -2,36 +2,90 @@
 Main module responsible for the upper-level API design,
 security middleware layers, and Swagger parameters
 """
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-# from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
-from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 from pathlib import Path
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+# from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
 from app.api.api_router import api_router, auth_router
-from app.core.config import DEBUG_MODE_C  # , get_settings,
+from app.api.deps import ChainController
+from app.api.endpoints import tasks_mcp
+from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
+from app.cmd.c2_tool import MythicClient
+from app.core.config import DEBUG_MODE_C, get_settings
+from app.mitre_loader import build_apt_chain_index, load_attack_graph
+from app.services.ttp_info_service import TTPInfoService
 
-from app.cmd.c2_tool import init_mythic
+# mount only the raw ASGI handler for mcp
+eagle_mcp.streamable_http_app(streamable_http_path="/")
+_mcp_session_manager = eagle_mcp._lowlevel_server._session_manager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """create and manage services for C2"""
+    mythic_client = MythicClient()
+    try:
+        await mythic_client.connect()
+    except Exception as e:
+        print(
+            "\033[1;33mWARNING:   \033[0mok, you can test some without mythic because",
+            e,
+        )
+    app.state.mythic_client = mythic_client
+    app.state.chain_controller = ChainController()
+
+    # load MITRE ATT&CK data for TTP queries in MCP
+    settings = get_settings()
+    try:
+        graph = load_attack_graph(
+            settings.mitre.enterprise_attack_path,
+            settings.mitre.threat_groups_path,
+        )
+        app.state.attack_graph = graph
+        tasks_mcp._attack_graph = graph
+
+        # build APT co-use chain index for suggest_next_ttps
+        _ttp_svc = TTPInfoService(graph)
+        chain_index = build_apt_chain_index(graph, _ttp_svc.get_phase_for_ttp)
+        app.state.apt_chain_index = chain_index
+        tasks_mcp._apt_chain_index = chain_index
+    except Exception as e:
+        print("\033[1;33mWARNING:   \033[0mMITRE data load failed:", e)
+        app.state.attack_graph = None
+        app.state.apt_chain_index = None
+
+    # required for streamable HTTP in mcp
+    async with _mcp_session_manager.run():
+        yield
+
+    await mythic_client.disconnect()
 
 
 app = FastAPI(
     title="EAGLE",
     version="0.0.1",
     description="Emulated Attack Generator w/ Layered Engine <br>"
-                "<a href='https://github.com/eogod/EAGLE'>source</a> "
-                "<a href='/f/index'>GUI</a> <br><br>"
-                "(btw TypeError: NetworkError is just"
-                " a temporary time crutch, just wait a bit more)",
+    "<a href='https://github.com/eogod/EAGLE'>source</a> "
+    "<a href='/f/index'>GUI</a> <br><br>"
+    "(btw TypeError: NetworkError is just"
+    " a temporary time crutch, just wait a bit more)",
     openapi_url="/openapi.json",
     docs_url="/",
+    lifespan=lifespan,
 )
 
 app.include_router(auth_router)
 app.include_router(api_router)
+
+app.mount("/mcp", _mcp_session_manager.asgi_app)
 
 # Sets all CORS enabled origins
 app.add_middleware(
@@ -55,13 +109,11 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests_body(request: Request, call_next):
     if DEBUG_MODE_C:
-        print("\033[1;33mDEBUG:   Request \033[0m:"
-              f" {request.method} {request.url}")
+        print(f"\033[1;33mDEBUG:   Request \033[0m: {request.method} {request.url}")
         try:
             body = await request.body()
             if body:
-                print("\033[1;33mDEBUG:   Request body \033[0m:"
-                      f"{body.decode()}")
+                print(f"\033[1;33mDEBUG:   Request body \033[0m:{body.decode()}")
         except Exception:
             pass
 
@@ -69,34 +121,20 @@ async def log_requests_body(request: Request, call_next):
     return response
 
 
-app.mount("/static", StaticFiles(
-    directory=Path(__file__).parent.parent.parent / "frontend"
-    ), name="static")
-
-
-@app.on_event("startup")
-async def on_startup():
-    """ init steps for any chain """
-    try:
-        await init_mythic()
-    except Exception as e:
-        print("\033[1;33mWARNING:   \033[0m"
-              "ok, you can test some without mythic because", e)
+app.mount(
+    "/static",
+    StaticFiles(directory=Path(__file__).parent.parent.parent / "frontend"),
+    name="static",
+)
 
 
 @app.exception_handler(AssertionError)
 async def assertion_exception_handler(request: Request, exc: AssertionError):
-    """ we dont need 500 at bad input """
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)}
-    )
+    """we don't need 500 at bad input"""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
 @app.exception_handler(ValidationError)
 async def validation_exception_handler(request: Request, exc: ValidationError):
-    """ we dont need 500 at bad value inside """
-    return JSONResponse(
-        status_code=400,
-        content={"detail": str(exc)}
-    )
+    """we don't need 500 at bad value inside"""
+    return JSONResponse(status_code=400, content={"detail": str(exc)})

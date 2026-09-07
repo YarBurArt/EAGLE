@@ -1,8 +1,8 @@
 """
 Module to defining requests types and format
 """
+
 from pydantic import BaseModel, EmailStr
-from typing import Optional
 
 
 class BaseRequest(BaseModel):
@@ -32,7 +32,7 @@ class NewChainRequest(BaseRequest):
 class NewAgentRequest(BaseRequest):
     chain_name: str
     os_type: str
-    payload_type: Optional[str]
+    payload_type: str | None
 
 
 class LocalCommandRequest(BaseRequest):
@@ -44,12 +44,13 @@ class LocalCommandRequest(BaseRequest):
 class AgentCommandRequest(BaseRequest):
     chain_name: str
     callback_display_id: int
-    command_params: Optional[str] = "uname -a;lscpu;free;df;id;pwd;lsblk"
-    tool: Optional[str] = "shell"
+    command_params: str | None = "uname -a;lscpu;free;df;id;pwd;lsblk"
+    tool: str | None = "shell"
 
 
 class ActionApprovalRequest(BaseModel):
     """Модель запроса для одобрения действий"""
+
     command: str
     agent_id: int
     chain_id: int
@@ -58,22 +59,23 @@ class ActionApprovalRequest(BaseModel):
     type_tool: str
     target_os_type: str
     approved_by: str
-    reason: Optional[str] = ""
+    reason: str | None = ""
 
 
 class ActionExecutionRequest(BaseModel):
     """Модель запроса для выполнения одобренных действий"""
+
     command: str
     agent_display_id: int
     chain_id: int
     phase: str
     approved_by: str
-    context: Optional[str] = ""
+    context: str | None = ""
 
 
 class QueryRequest(BaseModel):
     prompt: str
-    provider: Optional[str] = None
+    provider: str | None = None
 
 
 class CodeAnalysisRequest(BaseModel):
@@ -82,10 +84,15 @@ class CodeAnalysisRequest(BaseModel):
 
 class PayloadRequest(BaseModel):
     description: str
-    language: Optional[str] = "python"
+    language: str | None = "python"
 
 
 class SuggestActionRequest(BaseRequest):
-    p_command: Optional[str] = "just analyze last steps and tell me what to do next"  # | None
+    p_command: str | None = "just analyze last steps and tell me what to do next"
     chain_id: int
     display_id: int
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict[str, str]]
+    provider: str | None = None

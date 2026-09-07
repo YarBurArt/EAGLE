@@ -1,4 +1,5 @@
-""" part of config for HTTP responses """
+"""part of config for HTTP responses"""
+
 JWT_ERROR_USER_REMOVED = "User removed"
 PASSWORD_INVALID = "Incorrect email or password"
 REFRESH_TOKEN_NOT_FOUND = "Refresh token not found"
