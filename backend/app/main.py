@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
-from app.api.api_router import api_router, auth_router
+from app.api.api_router import api_router, auth_router, frontend_router
 from app.api.deps import ChainController
 from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
@@ -74,19 +74,18 @@ app = FastAPI(
     version="0.0.1",
     description="Emulated Attack Generator w/ Layered Engine <br>"
     "<a href='https://github.com/eogod/EAGLE'>source</a> "
-    "<a href='/f/index'>GUI</a> <br><br>"
-    "(btw TypeError: NetworkError is just"
-    " a temporary time crutch, just wait a bit more)",
-    openapi_url="/openapi.json",
-    docs_url="/",
+    "<a href='/'>GUI</a> <br><br>",
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
     lifespan=lifespan,
 )
 
-app.include_router(auth_router)
-app.include_router(api_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(api_router, prefix="/api")
 
 app.mount("/mcp", _mcp_session_manager.asgi_app)
 
+app.include_router(frontend_router)
 # Sets all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,

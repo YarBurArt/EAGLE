@@ -3,9 +3,8 @@
 from pathlib import Path
 
 from fastapi import APIRouter
-
-# temp
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api import api_messages
 from app.api.endpoints import auth, kill_chain, llm, tasks, users
@@ -47,12 +46,43 @@ api_router.include_router(
     kill_chain.router, prefix="/export-chain", tags=["kill-chain"]
 )
 
-i_path = Path(__file__).parent.parent.parent.parent / "frontend" / "index.html"
+# since same repo
+_frontend_dist = (
+    Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
+)
+
+frontend_router = APIRouter(include_in_schema=False)
+
+# vite application bundle
+_assets_dir = _frontend_dist / "assets"
+if _assets_dir.is_dir():
+    frontend_router.mount(
+        "/assets",
+        StaticFiles(directory=_assets_dir),
+        name="frontend_assets",
+    )
 
 
-@api_router.get("/f/index", response_class=HTMLResponse, tags=["frontend"])
-async def min_index():
-    """temp solution for minimal frontend,
-    it will be available via react and webpack in the future"""
-    i_content = i_path.read_text(encoding="utf-8")
-    return HTMLResponse(content=i_content, status_code=200)
+@frontend_router.get("/{full_path:path}", response_class=HTMLResponse)
+async def serve_frontend(full_path: str):
+    if full_path.startswith("api/"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    if full_path:
+        candidate = (_frontend_dist / full_path).resolve()
+        dist_root = _frontend_dist.resolve()
+        if candidate.is_file() and candidate.is_relative_to(dist_root):
+            return FileResponse(candidate)
+
+    index = _frontend_dist / "index.html"
+    # print(index)
+    if not index.exists():
+        return HTMLResponse(
+            content=(
+                "<!doctype html><meta charset='utf-8'>"
+                "<title>EAGLE</title>"
+                "<p>frontend is not built, RTFM bro</p>"
+            ),
+            status_code=503,
+        )
+    return HTMLResponse(content=index.read_text(encoding="utf-8"), status_code=200)
