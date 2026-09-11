@@ -21,14 +21,13 @@ jobs:
     # cuz many fp
     continue-on-error: true
 
+    container:
+      image: semgrep/semgrep
+
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # https://semgrep.dev/docs/getting-started/quickstart
+      # https://semgrep.dev/p/javascript
       - name: Run Semgrep Analysis
-        uses: returntocorp/semgrep-action@v1
-        with:
-          # https://semgrep.dev/p/javascript
-          config: p/javascript
-          extra_args: --metrics=off frontend/
+        run: semgrep scan --config p/javascript --metrics=off frontend/
