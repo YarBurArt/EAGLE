@@ -31,4 +31,4 @@ jobs:
         with:
           # https://semgrep.dev/p/python
           config: p/python
-          extra_args: --metrics=off backend/
+          args: --metrics=off backend/
