@@ -63,6 +63,6 @@ strict = true
 target-version = "py313"
 
 [tool.ruff.lint]
-# pycodestyle, pyflakes, isort, pylint, pyupgrade
+# pycodestyle, pyflakes, isort, pylint, pyupgrade, flake8-bugbear, Bandit, simplifications
 ignore = ["E501"]
-select = ["E", "F", "I", "PL", "UP", "W"]
+select = ["E", "F", "I", "PL", "UP", "W", "B", "S", "SIM"]
