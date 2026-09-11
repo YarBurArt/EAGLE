@@ -58,12 +58,14 @@ def get_mythic_client(request: Request):
     from app.cmd.c2_tool import MythicClient  # noqa: PLC0415
 
     client = request.app.state.mythic_client
-    assert isinstance(client, MythicClient)
+    if not isinstance(client, MythicClient):
+        raise ValueError("cannot get Mythic client")
     return client
 
 
 def get_chain_controller(request: Request) -> ChainController:
     """inject ChainController from app.state"""
     controller = request.app.state.chain_controller
-    assert isinstance(controller, ChainController)
+    if not isinstance(controller, ChainController):
+        raise ValueError("cannot get ChainController")
     return controller

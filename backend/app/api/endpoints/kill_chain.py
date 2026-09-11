@@ -43,6 +43,9 @@ def result_to_dict_recursive(
     ins = inspect(instance)
     data = {}
 
+    if ins is None:
+        raise ValueError("to dict instance is None")
+
     for column in ins.mapper.column_attrs:
         value = getattr(instance, column.key)
         # convert date/time to iso string format

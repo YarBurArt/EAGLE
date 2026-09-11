@@ -69,7 +69,12 @@ async def process_approved_cmd(
     no db changes to AttackStep by default cuz it depends on tasks"""
     # tool_name like agent_libinject or local_impacket-wmiexec
     type_n, tool_n = cb.tool_name.split("_", 1)
-    assert type_n in ["local", "agent", "custom", "payload", "getcallback"]
+    supported_type_n = ["local", "agent", "custom", "payload", "getcallback"]
+    if type_n not in supported_type_n:
+        raise HTTPException(
+            400,
+            f"{type_n} + {tool_n} not supported for now, we have only {str(supported_type_n)}",
+        )
 
     if payload_params is None:
         payload_params = PayloadParams()
@@ -160,7 +165,8 @@ async def check_and_process_agent_cmd(
 ) -> tuple[AttackStep, str, Agent]:
     """run commands on agent and return output based on tool"""
     _, tool_n = cb.tool_name.split("_", 1)
-    assert cmd not in UNSAFE_CMD
+    if cmd in UNSAFE_CMD:
+        raise HTTPException(400, "bro, this is unsafe command for sure")
     try:
         result = await mythic_client.execute_agent_command(
             cmd=tool_n,
@@ -215,9 +221,14 @@ async def check_and_create_mpayload(
 ) -> tuple[AttackStep, str]:
     """check payload parameters and create payload, save in mythic,
     return uuid/id to get information or send to rhost"""
-    assert payload_params.os_type in ["Windows", "macOS", "Linux"]  # from mythic api
+    if payload_params.os_type not in ["Windows", "macOS", "Linux"]:  # from mythic api
+        raise HTTPException(
+            400, detail="OS type not supported, try closest one like Linux"
+        )
     # TODO: set port/os by C2, get information about agents profile
-    file_name = tool_n + hashlib.md5(str(time.time()).encode("utf-8"))
+    file_name = tool_n + hashlib.md5(
+        str(time.time()).encode("utf-8"), usedforsecurity=False
+    )
     cmd = "create_payload"
     result = await mythic_client.create_payload(
         payload_type=tool_n,
@@ -256,7 +267,8 @@ async def check_and_process_local_cmd(
 ) -> tuple[AttackStep, str]:
     """async function for check is safe command ->
     execute on zero agent, formatting to AttackStep"""
-    assert cmd not in UNSAFE_CMD
+    if cmd in UNSAFE_CMD:
+        raise HTTPException(400, "bro, this is unsafe command for sure")
     try:
         # send command to C2
         ex_result: AgentCommandOutput = await mythic_client.execute_local_command(

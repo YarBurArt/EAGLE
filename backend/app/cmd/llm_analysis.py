@@ -1,6 +1,7 @@
 """Module for unified interface to LLM services"""
 
 import os
+from logging import getLogger
 from typing import Any
 
 import g4f
@@ -12,6 +13,7 @@ from ollama import AsyncClient as OllamaAsyncClient
 
 from app.core.llm_templ import LLMTemplates
 
+logger = getLogger(__name__)
 g4f.debug.logging = False
 
 load_dotenv()
@@ -69,18 +71,24 @@ class LLMService:
     @staticmethod
     async def _local_llm(prompt: str) -> str:
         """Query local Ollama with a single prompt."""
+        if client_ollama is None:
+            raise HTTPException(500, "ollama not configured")
         res = await client_ollama.generate(
             model=os.getenv("LLMSERVICE__DEFAULT_MODEL", "mistral"),
             prompt=prompt,
             system=LLMTemplates.SYSTEM_PROMT,
         )
         # remove think text for deepseek-r1, qwen, qwq models
+        if res.response is None:
+            raise HTTPException(500, "cannot get ollama response")
         parts_th = res.response.rsplit("</think>", 1)
         return parts_th[-1] if len(parts_th) > 1 else res.response
 
     @staticmethod
     async def _local_llm_chat(messages: list[dict[str, Any]]) -> str:
         """Query local Ollama with multi-turn message history."""
+        if client_ollama is None:
+            raise HTTPException(500, "ollama not configured")
         res = await client_ollama.chat(
             model=os.getenv("LLMSERVICE__DEFAULT_MODEL", "mistral"),
             messages=messages,
@@ -106,7 +114,7 @@ class LLMService:
                     detail=f"Provider {provider_name} failed: {str(e)}",
                 ) from e
 
-        for name, provider in self.providers.items():
+        for _, provider in self.providers.items():
             try:
                 response = await client_g4f.chat.completions.create(
                     model=g4f.models.default,
@@ -117,6 +125,7 @@ class LLMService:
                 if content:
                     return content
             except Exception:
+                logger.info(f"Provider {provider_name} failed")
                 continue
 
         return "No response from any LLM provider"
@@ -140,7 +149,7 @@ class LLMService:
                     detail=f"Provider {provider_name} failed: {str(e)}",
                 ) from e
 
-        for name, provider in self.providers.items():
+        for _, provider in self.providers.items():
             try:
                 response = await client_g4f.chat.completions.create(
                     model=g4f.models.default,
@@ -151,6 +160,7 @@ class LLMService:
                 if content:
                     return content
             except Exception:
+                logger.info(f"Provider {provider_name} failed")
                 continue
 
         return "No response from any LLM provider"

@@ -90,7 +90,7 @@ app.include_router(frontend_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "0.0.0.0"  # DEBUG, CHANGE ME BEFORE RUN
+        "127.0.0.1"  # DEBUG, CHANGE ME BEFORE RUN
         #    str(origin).rstrip("/")
         #    for origin in get_settings().security.backend_cors_origins
     ],
@@ -114,7 +114,7 @@ async def log_requests_body(request: Request, call_next):
             if body:
                 print(f"\033[1;33mDEBUG:   Request body \033[0m:{body.decode()}")
         except Exception:
-            pass
+            return None
 
     response = await call_next(request)
     return response

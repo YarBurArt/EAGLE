@@ -39,7 +39,7 @@ async def llm_query(request: QueryRequest):
         result = await llm_service.query_llm(request.prompt, request.provider)
         return {"success": True, "response": result, "prompt": request.prompt}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate/payload")

@@ -12,7 +12,7 @@ class BaseResponse(BaseModel):
 
 
 class AccessTokenResponse(BaseResponse):
-    token_type: str = "Bearer"
+    token_type: str = "Bearer"  # noqa: S105
     access_token: str
     expires_at: int
     refresh_token: str

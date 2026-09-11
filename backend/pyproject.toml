@@ -25,6 +25,7 @@ autopep8 = "^2.3.2"
 g4f = "==8.2.6"
 ollama = "==0.6.2"
 ijson = "^3.3"
+pyyaml = "^6.0.3"
 
 [tool.poetry.group.dev.dependencies]
 coverage = "^7.9.1"
@@ -63,6 +64,12 @@ strict = true
 target-version = "py313"
 
 [tool.ruff.lint]
+# FastAPI Depends ignore, that's why DMR better btw
+ignore = ["E501", "B008"]
 # pycodestyle, pyflakes, isort, pylint, pyupgrade, flake8-bugbear, Bandit, simplifications
-ignore = ["E501"]
 select = ["E", "F", "I", "PL", "UP", "W", "B", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# ignore assert in tests, test creds
+"app/tests/**/*.py" = ["S101", "S105", "S106"]
+"alembic/*" = ["S101"]

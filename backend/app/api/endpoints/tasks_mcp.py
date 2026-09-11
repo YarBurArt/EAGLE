@@ -107,7 +107,8 @@ async def _get_ctx() -> ToolContext:
 
 
 def _get_ttp_service() -> TTPInfoService:
-    assert _attack_graph is not None, "MITRE ATT&CK data not loaded at startup"
+    if _attack_graph is None:
+        raise ValueError("MITRE ATT&CK data not loaded at startup")
     return TTPInfoService(_attack_graph, _apt_chain_index)
 
 
