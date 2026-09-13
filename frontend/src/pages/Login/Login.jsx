@@ -35,15 +35,15 @@ export const Login = () => {
   }
 
   return (
-    <div className="flex justify-center bg-bg-app mt-16">
+    <div className="flex min-h-screen items-center justify-center bg-app">
       <form
         onSubmit={handleSubmit}
         id="loginForm"
-        className="w-120 bg-bg-card border border-border-subtle rounded-md p-4 flex flex-col gap-4"
+        className="w-120 bg-card border border-subtle rounded-md p-4 flex flex-col gap-4"
       >
-        <h2 className="text-lg font-bold text-text-primary tracking-wider">EAGLE Login</h2>
+        <h2 className="text-lg font-bold text-primary tracking-wider">EAGLE Login</h2>
 
-        <label className="text-xs text-text-muted text-left">Email</label>
+        <label className="text-xs text-muted text-left">Email</label>
         <input
           type="email"
           id="email"
@@ -51,10 +51,10 @@ export const Login = () => {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Registered email"
           required
-          className="w-full px-3 py-2 bg-bg-input border border-border-default rounded text-sm text-text-primary outline-none focus:border-accent transition-colors"
+          className="w-full px-3 py-2 bg-input border border-default rounded text-sm text-primary outline-none focus:border-accent transition-colors"
         />
 
-        <label className="text-xs text-text-muted text-left">Password</label>
+        <label className="text-xs text-muted text-left">Password</label>
         <input
           type="password"
           id="password"
@@ -62,7 +62,7 @@ export const Login = () => {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Super_secret_password"
           required
-          className="w-full px-3 py-2 bg-bg-input border border-border-default rounded text-sm text-text-primary outline-none focus:border-accent transition-colors"
+          className="w-full px-3 py-2 bg-input border border-default rounded text-sm text-primary outline-none focus:border-accent transition-colors"
         />
 
         <button
@@ -71,7 +71,7 @@ export const Login = () => {
         >
           Sign in
         </button>
-        <p>An account can be created by admin</p>
+        <p className="text-primary">An account can be created by admin</p>
         {err && <p className="text-xs text-danger">{err}</p>}
       </form>
     </div>
