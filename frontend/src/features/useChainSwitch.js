@@ -38,7 +38,7 @@ export const useChainSwitch = () => {
     }
   }, [])
 
-  // run loadChains after last sync task as Microtask, just on first render 
+  // run loadChains after last sync task as Microtask, just on first render
   useEffect(() => {
     queueMicrotask(loadChains)
   }, [loadChains])

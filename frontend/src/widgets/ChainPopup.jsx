@@ -9,7 +9,7 @@ export const ChainPopup = ({ chains = [], onClose, onSelect, onCreate, onDelete 
 
   useEffect(() => {
     const onClick = (e) => {
-      // check is click inside Popup element by reference, if not then close 
+      // check is click inside Popup element by reference, if not then close
       if (popupRef.current && !popupRef.current.contains(e.target)) {
         onClose()
       }
@@ -18,7 +18,7 @@ export const ChainPopup = ({ chains = [], onClose, onSelect, onCreate, onDelete 
     return () => document.removeEventListener('mousedown', onClick)
   }, [onClose])
 
-  // create chain object just by chain name, then select to edit phases/steps 
+  // create chain object just by chain name, then select to edit phases/steps
   const handleCreate = async (e) => {
     e.preventDefault()
     setError('')

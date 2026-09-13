@@ -104,7 +104,7 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
         }
         placeholder={isAgent ? 'uname -a; lscpu; free...' : 'Enter command...'}
       />
-      {/* TODO: TTPs like kill chain view on minify, or by LLM analyze summary 
+      {/* TODO: TTPs like kill chain view on minify, or by LLM analyze summary
           for now just disable output on minified context
       */}
       {!minified && (

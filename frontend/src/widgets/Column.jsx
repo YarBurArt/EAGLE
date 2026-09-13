@@ -60,7 +60,7 @@ export const Column = ({
     return () => document.removeEventListener('mousedown', onClick)
   }, [beforeDropdownOpen])
 
-  // dynamic column resize for long commands and raw outputs, only for prev column on click 
+  // dynamic column resize for long commands and raw outputs, only for prev column on click
   const startResize = (e) => {
     e.preventDefault()
     const startX = e.clientX

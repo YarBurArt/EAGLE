@@ -35,7 +35,9 @@ export const NavBar = ({ onSelect, onCreateChain, onDeleteChain, chains = [], cu
     if (!currentChain) return
     try {
       await chainApi.cancelChain(currentChain.chain_id, currentChain.chain_name)
-      toast.warning('Chain stopped, but some consequences of steps can still appear in next 5 minutes !')
+      toast.warning(
+        'Chain stopped, but some consequences of steps can still appear in next 5 minutes !',
+      )
     } catch {
       toast.error('Failed to stop chain, if critical just kill backend :)')
     }

@@ -73,8 +73,8 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
     const text = `Type: ${step.step_type}\nTool: ${step.tool_name}\nID: ${step.callback_display_id}\nStatus: ${step.status}\n\n${step.step_type === 'agent' ? 'Params' : 'Command'}:\n${step.step_type === 'agent' ? step.command_params : step.command}\n\nOutput:\n${step.raw_log}`
     navigator.clipboard.writeText(text)
   }
-  // Backend don't know about phases, it know current phase for step, 
-  // so if phase without runned steps, then should be store on frontend side for now  
+  // Backend don't know about phases, it know current phase for step,
+  // so if phase without runned steps, then should be store on frontend side for now
   const removePhase = useCallback((phaseId) => {
     if (!window.confirm('Remove this phase?')) return
     setPhases((prev) => prev.filter((p) => p.id !== phaseId))
