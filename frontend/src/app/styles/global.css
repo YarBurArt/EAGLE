@@ -1,1 +1,20 @@
 @import 'tailwindcss';
+
+@theme {
+  --color-app: #0d1117;
+  --color-nav: #161b22;
+  --color-card: #161b22;
+  --color-card-hover: #1c2333;
+  --color-input: #0d1117;
+  --color-dropdown: #161b22;
+  --color-subtle: #21262d;
+  --color-default: #30363d;
+  --color-strong: #484f58;
+  --color-primary: #c9d1d9;
+  --color-secondary: #8b949e;
+  --color-muted: #6e7681;
+  --color-accent: #58a6ff;
+  --color-danger: #dd6760;
+  --color-success: #61c06d;
+  --color-warning: #d29922;
+}
