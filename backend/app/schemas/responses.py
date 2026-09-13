@@ -32,6 +32,12 @@ class NewChainResponse(BaseResponse):
     current_phase_name: str
 
 
+class ChainOverviewResponse(BaseResponse):
+    chain_id: int
+    chain_name: str
+    current_phase_name: str
+
+
 class NewPhaseResponse(BaseResponse):
     chain_id: int
     current_phase_name: str

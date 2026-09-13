@@ -189,3 +189,36 @@ class ChainService:
                 status_code=400, detail="Unknown phase, check UCKC phases"
             )
         return UKC_PHASE_DESCRIPTIONS.get(phase_name, "")
+
+    async def list_chains(self, current_user: User) -> list[dict[str, Any]]:
+        result = await self.session.execute(
+            select(AttackChain)
+            .where(AttackChain.user_id == current_user.user_id)
+            .order_by(desc(AttackChain.create_time))
+        )
+        chains = result.scalars().all()
+        chain_list = []
+
+        for c in chains:
+            phase_row = await self.session.execute(
+                select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == c.id)
+            )
+            phase_obj = phase_row.scalars().first()
+            chain_list.append(
+                {
+                    "chain_id": c.id,
+                    "chain_name": c.chain_name,
+                    "current_phase_name": phase_obj.phase
+                    if phase_obj
+                    else "Reconnaissance",
+                }
+            )
+        return chain_list
+
+    async def delete_chain(self, chain_id: int, current_user: User) -> None:
+        chain = await self.session.get(AttackChain, chain_id)
+        if chain is None or chain.user_id != current_user.user_id:
+            raise HTTPException(status_code=404, detail="Chain not found")
+
+        await self.session.delete(chain)
+        await self.session.commit()

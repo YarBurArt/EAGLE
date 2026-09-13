@@ -30,6 +30,7 @@ from app.schemas.requests import (
 )
 from app.schemas.responses import (
     AttackStepResponse,
+    ChainOverviewResponse,
     GetChainPhaseResponse,
     LocalCommandResponse,
     NewAgentResponse,
@@ -49,6 +50,32 @@ from app.services.s_deps import (
 )
 
 router = APIRouter()
+
+
+@router.get(
+    "/chains",
+    description="List all chains for current user",
+    response_model=list[ChainOverviewResponse],
+)
+async def list_chains(
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+) -> list[ChainOverviewResponse]:
+    chains = await chain_service.list_chains(current_user)
+    return chains
+
+
+@router.delete(
+    "/chains/{chain_id}",
+    description="Delete chain",
+)
+async def delete_chain(
+    chain_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+):
+    await chain_service.delete_chain(chain_id, current_user)
+    return {"status": "deleted", "chain_id": chain_id}
 
 
 @router.post(
