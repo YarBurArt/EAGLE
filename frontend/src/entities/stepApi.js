@@ -23,6 +23,5 @@ export const stepApi = {
 
   deleteStep: (stepId) => api.delete(`${BASE}/step/${stepId}`).then((res) => res.data),
 
-  updateStep: (stepId, patch) =>
-    api.patch(`${BASE}/step/${stepId}`, patch).then((res) => res.data),
+  updateStep: (stepId, patch) => api.patch(`${BASE}/step/${stepId}`, patch).then((res) => res.data),
 }

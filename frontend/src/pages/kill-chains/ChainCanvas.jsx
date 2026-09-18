@@ -29,7 +29,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
         const data = await chainApi.getChainWithSteps(currentChain.chain_id)
         const stepsByPhaseMap = {}
         const phasesFromSteps = []
-        
+
         for (const step of data.steps) {
           const phaseName = step.phase
           const phaseObj = UCKC_PHASES.find((p) => p.name === phaseName)
@@ -84,14 +84,12 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
     if (stepId) {
       try {
         await stepApi.updateStep(stepId, patch)
-        // cuz AttackStep table doesn't store specific order for now, so move step to the end of phase 
+        // cuz AttackStep table doesn't store specific order for now, so move step to the end of phase
         setStepsByPhase((prev) => {
           const next = { ...prev }
           for (const phase of Object.keys(next)) {
             const list = next[phase]
-            const idx = list.findIndex(
-              (s) => s.id === stepId || s._tempId === stepId,
-            )
+            const idx = list.findIndex((s) => s.id === stepId || s._tempId === stepId)
             if (idx !== -1) {
               const [moved] = list.splice(idx, 1)
               next[phase] = [...list, moved]
@@ -154,8 +152,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
       setStepsByPhase((prev) => {
         const next = { ...prev }
         for (const phase of Object.keys(next)) {
-          next[phase] = next[phase].filter((s) => 
-            s.id !== stepId && s._tempId !== stepId)
+          next[phase] = next[phase].filter((s) => s.id !== stepId && s._tempId !== stepId)
         }
         return next
       })

@@ -177,17 +177,27 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
           >
             Delete
           </ActionButton>
-          <ActionButton hover="accent" onClick={(e) => { e.stopPropagation(); onCopy(step); }}>
+          <ActionButton
+            hover="accent"
+            onClick={(e) => {
+              e.stopPropagation()
+              onCopy(step)
+            }}
+          >
             Copy
           </ActionButton>
         </div>
 
         <span className={`font-mono text-[10px] ${meta.cls}`}>{meta.label}</span>
-        {step.id && (
-          <span className="font-mono text-[10px] text-muted">ID: {step.id}</span>
-        )}
+        {step.id && <span className="font-mono text-[10px] text-muted">ID: {step.id}</span>}
 
-        <RunButton onClick={(e) => { e.stopPropagation(); onRun(step); }} disabled={step.status === 'running'}>
+        <RunButton
+          onClick={(e) => {
+            e.stopPropagation()
+            onRun(step)
+          }}
+          disabled={step.status === 'running'}
+        >
           {step.status === 'running' ? <ArrowClockwiseIcon /> : <PlayIcon />} Run
         </RunButton>
       </div>
