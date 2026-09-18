@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { chainApi } from '../entities/chainApi'
+import { toast } from 'react-toastify'
 
 // to cache chain choice
 const LAST_CHAIN_KEY = 'eagle_last_chain_id'
@@ -26,7 +27,7 @@ export const useChainSwitch = () => {
             const full = await chainApi.getChainInfo(match.chain_id)
             setCurrentChain((prev) => prev ?? full)
           } catch {
-            // cuz will show chain list
+            toast.error('Chain info load failed, stale cache of current id / chain list?')
           }
         }
       }
@@ -76,27 +77,24 @@ export const useChainSwitch = () => {
     }
   }, [])
 
-  const deleteChain = useCallback(
-    async (chainId) => {
-      setLoading(true)
-      setError(null)
-      try {
-        await chainApi.delete(chainId)
-        // update chain list by filter chain on != deleted
-        setChains((prev) => prev.filter((c) => c.chain_id !== chainId))
-        if (currentChain?.chain_id === chainId) {
-          setCurrentChain(null)
-          localStorage.removeItem(LAST_CHAIN_KEY)
-        }
-      } catch (err) {
-        setError(err?.response?.data?.detail ?? 'Failed to delete chain')
-        throw err
-      } finally {
-        setLoading(false)
-      }
-    },
-    [currentChain],
-  )
+  const deleteChain = useCallback(async (chainId) => {
+    setLoading(true)
+    setError(null)
+    try {
+      await chainApi.delete(chainId)
+      // update chain list by filter chain on != deleted
+      setChains((prev) => prev.filter((c) => c.chain_id !== chainId))
+      // cuz closure of value may be stale so prev
+      // reads the latest state value, clears it if the deleted chain was active
+      setCurrentChain((prev) => (prev?.chain_id === chainId ? null : prev))
+      localStorage.removeItem(LAST_CHAIN_KEY)
+    } catch (err) {
+      setError(err?.response?.data?.detail ?? 'Failed to delete chain')
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   return {
     chains,
