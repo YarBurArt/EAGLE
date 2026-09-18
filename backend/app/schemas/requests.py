@@ -39,6 +39,7 @@ class LocalCommandRequest(BaseRequest):
     chain_name: str
     callback_display_id: int
     command: str
+    is_analyze_llm: bool = False
 
 
 class AgentCommandRequest(BaseRequest):
@@ -46,6 +47,7 @@ class AgentCommandRequest(BaseRequest):
     callback_display_id: int
     command_params: str | None = "uname -a;lscpu;free;df;id;pwd;lsblk"
     tool: str | None = "shell"
+    is_analyze_llm: bool = False
 
 
 class ActionApprovalRequest(BaseModel):

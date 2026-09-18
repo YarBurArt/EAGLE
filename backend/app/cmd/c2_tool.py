@@ -4,6 +4,7 @@ to working with Mythic C2
 """
 
 import json
+import logging
 import os
 import socket
 import uuid
@@ -13,6 +14,7 @@ from mythic import mythic
 from pydantic import UUID4, BaseModel
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class AgentCommandOutput(BaseModel):
@@ -244,6 +246,7 @@ class MythicClient:
         """async function to execute command on zero agent via shell agent
         and timeout, inside, there is a subscription to graphql event
         at the end of the task"""
+        logger.info("local command: %s on callback %s", cmd, callback_display_id)
         output = await mythic.issue_task_and_waitfor_task_output(
             mythic=self._instance,
             command_name="shell",
@@ -251,6 +254,7 @@ class MythicClient:
             callback_display_id=callback_display_id,
             timeout=timeout,
         )
+        logger.info("local command output for callback %s", callback_display_id)
         mythic_t_id = callback_display_id
         mythic_p_id, mythic_p_uuid = await self.get_payload_ids(callback_display_id)
 

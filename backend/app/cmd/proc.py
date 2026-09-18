@@ -5,6 +5,7 @@ based on doc https://www.unifiedkillchain.com/assets/The-Unified-Kill-Chain.pdf
 
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass
 
@@ -16,6 +17,8 @@ from app.cmd.llm_analysis import llm_service
 from app.core.config import PHASE_COMMANDS, UNSAFE_CMD, phase_prompts
 from app.core.llm_templ import LLMTemplates
 from app.models import Agent, AttackStep
+
+logger = logging.getLogger(__name__)
 
 
 class ActionSuggestionsResponse(BaseModel):
@@ -161,7 +164,7 @@ async def check_and_process_agent_cmd(
     ctx: ChainContext,
     cmd: str,
     mythic_client: MythicClient,
-    no_llm_analysis: bool = False,
+    is_analyze_llm: bool = False,
 ) -> tuple[AttackStep, str, Agent]:
     """run commands on agent and return output based on tool"""
     _, tool_n = cb.tool_name.split("_", 1)
@@ -174,6 +177,13 @@ async def check_and_process_agent_cmd(
             callback_display_id=cb.display_id,
         )  # by llm cmd based on get_cmd_list...
     except Exception as e:  # general exception cuz mythic lib
+        logger.error(
+            "agent command failed for display_id %s tool %s: %s",
+            cb.display_id,
+            tool_n,
+            e,
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="The command was aborted by C2, the step/agent not saved,"
@@ -181,9 +191,9 @@ async def check_and_process_agent_cmd(
             " and shell scripts for long time tasks.",
         ) from e
     llm_analysis = (
-        ""
-        if no_llm_analysis
-        else await analyze_command_output_with_llm(result.output, cmd)
+        await analyze_command_output_with_llm(result.output, cmd)
+        if is_analyze_llm
+        else ""
     )
     # for reproducibility
     rhost, agent_os, agent_status = await mythic_client.get_os_by_display_id(
@@ -263,7 +273,7 @@ async def check_and_process_local_cmd(
     display_id: int,
     ctx: ChainContext,
     mythic_client: MythicClient,
-    no_llm_analysis: bool = False,
+    is_analyze_llm: bool = False,
 ) -> tuple[AttackStep, str]:
     """async function for check is safe command ->
     execute on zero agent, formatting to AttackStep"""
@@ -275,6 +285,9 @@ async def check_and_process_local_cmd(
             cmd, display_id
         )
     except Exception as e:
+        logger.error(
+            "local command failed for display %s: %s", display_id, e, exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="The command was aborted by C2, the step was not saved,"
@@ -282,9 +295,9 @@ async def check_and_process_local_cmd(
             " for long time tasks.",
         ) from e
     llm_analysis = (
-        ""
-        if no_llm_analysis
-        else await analyze_command_output_with_llm(ex_result.output, cmd)
+        await analyze_command_output_with_llm(ex_result.output, cmd)
+        if is_analyze_llm
+        else ""
     )
 
     attack_step = AttackStep(

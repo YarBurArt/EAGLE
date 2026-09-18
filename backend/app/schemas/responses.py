@@ -61,6 +61,7 @@ class AttackStepResponse(BaseResponse):
     phase: str
     tool_name: str
     command: str
+    callback_display_id: int
     mythic_payload_uuid: str | UUID4
     status: str
     raw_log: str
@@ -77,6 +78,13 @@ class GetChainPhaseResponse(BaseResponse):
     final_status: str
     current_phase_name: str
     last_attack_step: AttackStepResponse | None
+
+
+class ChainWithStepsResponse(BaseResponse):
+    chain_id: int
+    chain_name: str
+    current_phase_name: str
+    steps: list[AttackStepResponse]
 
 
 class NewAgentResponse(BaseResponse):

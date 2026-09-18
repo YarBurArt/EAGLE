@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.config import phases
 from app.models import AttackChain, AttackStep, CurrentAttackPhase, User
@@ -78,6 +79,7 @@ class ChainService:
         chain_c_phase = chain_c_phase_list.scalars().first()
         if chain_c_phase is None:
             raise HTTPException(status_code=404, detail="Phase not found")
+
         current_phase_n = chain_c_phase.phase or "Reconnaissance"
         res_l_step = await self.session.execute(
             select(AttackStep)
@@ -128,6 +130,7 @@ class ChainService:
             select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_id)
         )
         c_phase = res_phase.scalars().first()
+
         if not c_phase:
             c_phase = CurrentAttackPhase(chain_id=chain_id, phase=phase_name)
             self.session.add(c_phase)
@@ -147,6 +150,7 @@ class ChainService:
         last_attack_step_obj = res_l_step.scalars().first()
         if last_attack_step_obj is None:
             raise HTTPException(status_code=404, detail="No step to reject")
+
         await self.session.delete(last_attack_step_obj)
         await self.session.commit()
         return last_attack_step_obj
@@ -166,6 +170,46 @@ class ChainService:
         )
         return list(chain_steps_list.scalars().all())
 
+    async def get_chain_with_steps(
+        self, chain_id: int, current_user: User
+    ) -> dict[str, Any]:
+        chain_ca_list = await self.session.execute(
+            select(AttackChain).where(AttackChain.id == chain_id)
+        )
+        chain_ca = chain_ca_list.scalars().first()
+        if chain_ca is None:
+            raise HTTPException(status_code=404, detail="Chain not found")
+        chain_username = current_user.username or current_user.email.split("@", 1)[0]
+        chain_c_phase_list = await self.session.execute(
+            select(CurrentAttackPhase).where(CurrentAttackPhase.chain_id == chain_ca.id)
+        )
+
+        chain_c_phase = chain_c_phase_list.scalars().first()
+        if chain_c_phase is None:
+            raise HTTPException(status_code=404, detail="Phase not found")
+
+        current_phase_n = chain_c_phase.phase or "Reconnaissance"
+        steps = await self.session.execute(
+            select(AttackStep)
+            .where(AttackStep.chain_id == chain_id)
+            .options(selectinload(AttackStep.agent))
+        )
+        steps = list(steps.scalars().all())
+        for step in steps:
+            agent = step.agent[0] if step.agent else None
+            step.callback_display_id = agent.callback_display_id if agent else 0
+
+        return {
+            "chain_id": chain_ca.id,
+            "user_id": chain_ca.user_id,
+            "chain_name": chain_ca.chain_name,
+            "username": chain_username,
+            "user_email": current_user.email,
+            "final_status": chain_ca.final_status,
+            "current_phase_name": current_phase_n,
+            "steps": steps,
+        }
+
     async def get_last_step(self, chain_id: int) -> AttackStep | None:
         res_l_step = await self.session.execute(
             select(AttackStep)
@@ -174,6 +218,38 @@ class ChainService:
             .limit(1)
         )
         return res_l_step.scalars().first()
+
+    async def delete_step(self, step_id: int, current_user: User) -> None:
+        step = await self.session.get(AttackStep, step_id)
+        if step is None:
+            raise HTTPException(status_code=404, detail="Step not found")
+        chain = await self.session.get(AttackChain, step.chain_id)
+
+        if chain is None or chain.user_id != current_user.user_id:
+            raise HTTPException(status_code=404, detail="Chain not found")
+
+        await self.session.delete(step)
+        await self.session.commit()
+
+    async def edit_step(
+        self, step_id: int, current_user: User, patch: dict[str, Any]
+    ) -> AttackStep:
+        step = await self.session.get(AttackStep, step_id)
+        if step is None:
+            raise HTTPException(status_code=404, detail="Step not found")
+
+        chain = await self.session.get(AttackChain, step.chain_id)
+        if chain is None or chain.user_id != current_user.user_id:
+            raise HTTPException(status_code=404, detail="Chain not found")
+
+        allowed_fields = {"tool_name", "command", "raw_log", "status"}
+        for field, value in patch.items():
+            if field in allowed_fields:
+                setattr(step, field, value)
+
+        await self.session.commit()
+        await self.session.refresh(step)
+        return step
 
     @staticmethod
     async def get_possible_phases() -> list[dict[str, str]]:
