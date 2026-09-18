@@ -11,6 +11,8 @@ export const chainApi = {
 
   getChainInfo: (chainId) => api.get(`${BASE}/chain-phase/${chainId}`).then((res) => res.data),
 
+  getChainWithSteps: (chainId) => api.get(`${BASE}/chain/${chainId}`).then((res) => res.data),
+
   nextPhase: (chainId) => api.post(`${BASE}/next-phase/${chainId}`).then((res) => res.data),
   setPhase: (chainId, phaseName) =>
     api
