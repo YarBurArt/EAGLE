@@ -234,7 +234,7 @@ export const Column = ({
         </div>
 
         <button
-          onClick={onAddStep}
+          onClick={(e) => { e.stopPropagation(); onAddStep(); }}
           className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-default bg-transparent py-2 text-xs text-muted transition-colors hover:border-accent hover:bg-accent/5 hover:text-accent"
         >
           <PlusCircleIcon /> Add step

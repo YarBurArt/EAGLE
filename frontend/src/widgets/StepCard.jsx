@@ -1,5 +1,5 @@
-import { useRef, useEffect } from 'react'
-import { STEP_TYPES } from '../entities/types'
+import { useRef, useEffect, useState } from 'react'
+import { STEP_TYPES, STEP_STATUS } from '../entities/types'
 import { ArrowClockwiseIcon, PlayIcon } from '@phosphor-icons/react'
 import { useMinify } from '../context/useMinify.js'
 import {
@@ -24,6 +24,32 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
   const cmdRef = useRef(null)
   const outRef = useRef(null)
   const { minified } = useMinify()
+  const [elapsed, setElapsed] = useState(0)
+  const startTimeRef = useRef(null)
+  const intervalRef = useRef(null)
+
+  // TODO: fix this workaround, read run status by WS
+  useEffect(() => {
+    if (step.status === STEP_STATUS.RUNNING) {
+      startTimeRef.current = Date.now()
+      intervalRef.current = setInterval(() => {
+        setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000))
+      }, 1000)
+    } else {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
+  }, [step.status])
+
+  const TIMEOUT_WARNING = 300
 
   const autoResize = (el) => {
     if (!el) return
@@ -56,7 +82,8 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
         <div className="flex items-center gap-1">
           <label className="text-[10px] text-muted">C2 Display ID:</label>
           <Input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={step.callback_display_id ?? 0}
             onChange={(e) =>
               onUpdate(step.id ?? step._tempId, {
@@ -119,6 +146,22 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
             placeholder="Raw output / logs..."
             readOnly
           />
+          {step.status === STEP_STATUS.RUNNING && (
+            <div className="mt-2">
+              <div className="h-[2px] w-full rounded bg-default overflow-hidden">
+                {/* progress bar */}
+                <div
+                  className="h-full rounded bg-blue-500 transition-all"
+                  style={{ width: `${Math.min((elapsed / TIMEOUT_WARNING) * 100, 100)}%` }}
+                />
+              </div>
+              {elapsed >= TIMEOUT_WARNING && (
+                <div className="mt-1 text-[10px] text-warning">
+                  Check C2 or backend logs, command is taking too long
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -126,21 +169,25 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
         <div className="flex gap-1">
           <ActionButton
             hover="danger"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation() // prevent other event handlers here
               if (!window.confirm('Delete this step?')) return
               onDelete(step.id ?? step._tempId)
             }}
           >
             Delete
           </ActionButton>
-          <ActionButton hover="accent" onClick={() => onCopy(step)}>
+          <ActionButton hover="accent" onClick={(e) => { e.stopPropagation(); onCopy(step); }}>
             Copy
           </ActionButton>
         </div>
 
         <span className={`font-mono text-[10px] ${meta.cls}`}>{meta.label}</span>
+        {step.id && (
+          <span className="font-mono text-[10px] text-muted">ID: {step.id}</span>
+        )}
 
-        <RunButton onClick={() => onRun(step)} disabled={step.status === 'running'}>
+        <RunButton onClick={(e) => { e.stopPropagation(); onRun(step); }} disabled={step.status === 'running'}>
           {step.status === 'running' ? <ArrowClockwiseIcon /> : <PlayIcon />} Run
         </RunButton>
       </div>

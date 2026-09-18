@@ -49,7 +49,7 @@ export const NavBar = ({ onSelect, onCreateChain, onDeleteChain, chains = [], cu
       await chainApi.runChain(currentChain.chain_id)
       toast.success('Chain is maybe running...')
     } catch {
-      toast.error('Failed to run chain')
+      toast.error('Chain run failed, backend maybe unreachable')
     }
   }
 
