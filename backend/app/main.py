@@ -137,3 +137,15 @@ async def assertion_exception_handler(request: Request, exc: AssertionError):
 async def validation_exception_handler(request: Request, exc: ValidationError):
     """we don't need 500 at bad value inside"""
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(ConnectionRefusedError)
+async def connection_refused_exception_handler(
+    request: Request, exc: ConnectionRefusedError
+):
+    """if something wrong with DB or itz env"""
+    print("\033[1;33mWARNING:   \033[0m DB connection:", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "DB connection error, check docker logs and .env creds"},
+    )
