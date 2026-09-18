@@ -142,7 +142,7 @@ async def run_local_command(
             chain_id,
             phase_name,
             ctx.user,
-            no_llm_analysis=True,
+            is_analyze_llm=False,
         )
     return {"chain_name": chain_name_r, **result}
 
@@ -169,7 +169,7 @@ async def run_agent_command(
             chain_id,
             phase_name,
             ctx.user,
-            no_llm_analysis=True,
+            is_analyze_llm=False,
         )
     return {"chain_name": chain_name_r, **result}
 

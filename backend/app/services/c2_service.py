@@ -32,12 +32,12 @@ class CommandsC2ExecService:
         chain_id: int,
         phase_name: str,
         current_user: User,
-        no_llm_analysis: bool = False,
+        is_analyze_llm: bool = False,
     ) -> dict[str, Any]:
         """execute bash/C2 command via local agent"""
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
         step, llm_a = await check_and_process_local_cmd(
-            command, display_id, ctx, self.mythic_client, no_llm_analysis
+            command, display_id, ctx, self.mythic_client, is_analyze_llm
         )
         self.session.add(step)
         try:
@@ -64,12 +64,12 @@ class CommandsC2ExecService:
         chain_id: int,
         phase_name: str,
         current_user: User,
-        no_llm_analysis: bool = False,
+        is_analyze_llm: bool = False,
     ) -> dict[str, Any]:
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
         cb = CallbackInfo(display_id=display_id, tool_name="agent_" + tool)
         step, llm_a, c_agent = await check_and_process_agent_cmd(
-            cb, ctx, command_params, self.mythic_client, no_llm_analysis
+            cb, ctx, command_params, self.mythic_client, is_analyze_llm
         )
         self.session.add(step)
         try:

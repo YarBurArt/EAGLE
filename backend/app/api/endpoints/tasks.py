@@ -31,6 +31,7 @@ from app.schemas.requests import (
 from app.schemas.responses import (
     AttackStepResponse,
     ChainOverviewResponse,
+    ChainWithStepsResponse,
     GetChainPhaseResponse,
     LocalCommandResponse,
     NewAgentResponse,
@@ -109,7 +110,12 @@ async def run_local_command(
         data.chain_name, current_user
     )
     result = await command_service.run_local_command(
-        data.command, data.callback_display_id, chain_id, phase_name, current_user
+        data.command,
+        data.callback_display_id,
+        chain_id,
+        phase_name,
+        current_user,
+        data.is_analyze_llm,
     )
     return LocalCommandResponse(
         chain_name=chain_name,
@@ -138,6 +144,7 @@ async def run_agent_command(
         chain_id,
         phase_name,
         current_user,
+        data.is_analyze_llm,
     )
     return LocalCommandResponse(
         chain_name=chain_name,
@@ -209,6 +216,63 @@ async def read_chain_info(
         **info,
         last_attack_step=AttackStepResponse.from_orm(last_step) if last_step else None,
     )
+
+
+@router.get(
+    "/chain/{chain_id}",
+    description="Get full chain with all steps",
+    response_model=ChainWithStepsResponse,
+)
+async def read_chain_with_steps(
+    chain_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+) -> ChainWithStepsResponse:
+    info = await chain_service.get_chain_with_steps(chain_id, current_user)
+    steps = info.pop("steps", [])
+
+    return ChainWithStepsResponse(
+        chain_id=info["chain_id"],
+        chain_name=info["chain_name"],
+        current_phase_name=info["current_phase_name"],
+        steps=[AttackStepResponse.from_orm(s) for s in steps],
+    )
+
+
+@router.delete(
+    "/step/{step_id}",
+    description="Delete a specific step from the chain",
+)
+async def delete_step(
+    step_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+):
+    await chain_service.delete_step(step_id, current_user)
+    return {"status": "deleted", "step_id": step_id}
+
+
+@router.patch(
+    "/step/{step_id}",
+    description="Edit a specific step fields, "
+    "then move step to the end of current phase",
+)
+async def edit_step(
+    step_id: int,
+    patch: dict[str, Any],
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+):
+    step = await chain_service.edit_step(step_id, current_user, patch)
+    return {
+        "id": step.id,
+        "chain_id": step.chain_id,
+        "phase": step.phase,
+        "tool_name": step.tool_name,
+        "command": step.command,
+        "status": step.status,
+        "raw_log": step.raw_log,
+    }
 
 
 @router.post(
