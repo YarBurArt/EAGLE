@@ -1,10 +1,13 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Column } from '../../widgets/Column'
 import { UCKC_PHASES } from '../../shared/config/mitre'
 import { STEP_STATUS, STEP_TYPES } from '../../entities/types'
+import { chainApi } from '../../entities/chainApi'
+import { stepApi } from '../../entities/stepApi'
 import { useRunStep } from '../../features/useRunStep'
 import { useRunPhase } from '../../features/useRunPhase'
 import { useAddPhase } from '../../features/useAddPhase'
+import { toast } from 'react-toastify'
 
 export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   const tempIdRef = useRef(0)
@@ -19,7 +22,56 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   })
   const [stepsByPhase, setStepsByPhase] = useState({})
 
-  const updateStep = useCallback((stepId, patch) => {
+  useEffect(() => {
+    if (!currentChain) return
+    const loadSteps = async () => {
+      try {
+        const data = await chainApi.getChainWithSteps(currentChain.chain_id)
+        const stepsByPhaseMap = {}
+        const phasesFromSteps = []
+        
+        for (const step of data.steps) {
+          const phaseName = step.phase
+          const phaseObj = UCKC_PHASES.find((p) => p.name === phaseName)
+          const phaseId = phaseObj ? phaseObj.id : phaseName
+          const isAgent = step.tool_name?.startsWith('agent_')
+          if (!stepsByPhaseMap[phaseId]) {
+            stepsByPhaseMap[phaseId] = []
+            if (phaseObj) phasesFromSteps.push(phaseObj)
+          }
+
+          stepsByPhaseMap[phaseId].push({
+            id: step.id,
+            chain_name: currentChain.chain_name,
+            step_type: isAgent ? STEP_TYPES.AGENT : STEP_TYPES.LOCAL,
+            callback_display_id: step.callback_display_id ?? 0,
+            tool_name: step.tool_name,
+            command: isAgent ? '' : step.command,
+            command_params: isAgent ? step.command : '',
+            tool: isAgent ? step.tool_name.replace('agent_', '') : 'shell',
+            status: step.status,
+            raw_log: step.raw_log,
+          })
+        }
+        setPhases((prev) => {
+          const existingIds = new Set(prev.map((p) => p.id))
+          const newPhases = phasesFromSteps.filter((p) => !existingIds.has(p.id))
+          if (newPhases.length === 0) return prev
+          return [...prev, ...newPhases].sort((a, b) => a.order - b.order)
+        })
+        setStepsByPhase((prev) => {
+          const hasExistingSteps = Object.values(prev).some((s) => s.length > 0)
+          if (hasExistingSteps) return prev
+          return stepsByPhaseMap
+        })
+      } catch {
+        toast.error('Steps load failed, backend maybe died')
+      }
+    }
+    loadSteps()
+  }, [currentChain])
+
+  const updateStep = useCallback(async (stepId, patch) => {
     setStepsByPhase((prev) => {
       const next = { ...prev }
       for (const phase of Object.keys(next)) {
@@ -29,6 +81,34 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
       }
       return next
     })
+    if (stepId) {
+      try {
+        await stepApi.updateStep(stepId, patch)
+        // cuz AttackStep table doesn't store specific order for now, so move step to the end of phase 
+        setStepsByPhase((prev) => {
+          const next = { ...prev }
+          for (const phase of Object.keys(next)) {
+            const list = next[phase]
+            const idx = list.findIndex(
+              (s) => s.id === stepId || s._tempId === stepId,
+            )
+            if (idx !== -1) {
+              const [moved] = list.splice(idx, 1)
+              next[phase] = [...list, moved]
+              break
+            }
+          }
+          return next
+        })
+        if (patch.command || patch.tool_name) {
+          toast.info(
+            'Step will be placed at the end of the chain after reload (due to AttackStep table ordering)',
+          )
+        }
+      } catch {
+        toast.error('Step update failed, check backend connection')
+      }
+    }
   }, [])
 
   const { run } = useRunStep()
@@ -59,15 +139,29 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
     [currentChain],
   )
 
-  const deleteStep = useCallback((stepId) => {
-    setStepsByPhase((prev) => {
-      const next = { ...prev }
-      for (const phase of Object.keys(next)) {
-        next[phase] = next[phase].filter((s) => s.id !== stepId && s._tempId !== stepId)
+  const deleteStep = useCallback(
+    async (stepId) => {
+      const isTemp = !Object.values(stepsByPhase).some((steps) =>
+        steps.some((s) => s.id === stepId && s.id != null),
+      )
+      if (!isTemp) {
+        try {
+          await stepApi.deleteStep(stepId)
+        } catch {
+          toast.error('Step delete failed, maybe not found')
+        }
       }
-      return next
-    })
-  }, [])
+      setStepsByPhase((prev) => {
+        const next = { ...prev }
+        for (const phase of Object.keys(next)) {
+          next[phase] = next[phase].filter((s) => 
+            s.id !== stepId && s._tempId !== stepId)
+        }
+        return next
+      })
+    },
+    [stepsByPhase],
+  )
   // for now just copy logs
   const copyStep = (step) => {
     const text = `Type: ${step.step_type}\nTool: ${step.tool_name}\nID: ${step.callback_display_id}\nStatus: ${step.status}\n\n${step.step_type === 'agent' ? 'Params' : 'Command'}:\n${step.step_type === 'agent' ? step.command_params : step.command}\n\nOutput:\n${step.raw_log}`
@@ -150,7 +244,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
             onAddStep={() => addStep(phase.id)}
             onUpdateStep={updateStep}
             onDeleteStep={deleteStep}
-            onRunStep={(step) => run(step, updateStep)}
+            onRunStep={(step) => run(step, phase.name, currentChain.chain_id, updateStep)}
             onCopyStep={copyStep}
             onRunPhase={() => runPhase(phase.id, stepsByPhase[phase.id] ?? [])}
             onInsertPhase={onInsertPhase}
