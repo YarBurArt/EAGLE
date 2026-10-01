@@ -14,7 +14,7 @@ bcrypt = "==5.0.0"
 fastapi = "==0.141.1"
 pydantic = { extras = ["dotenv", "email"], version = "^2.11.7" }
 pydantic-settings = "^2.10.1"
-pyjwt = "^2.13.0"
+pyjwt = "^2.15.0"
 python-multipart = "^0.0.32"
 sqlalchemy = { extras = ["asyncio"], version = "^2.0.41" }
 mythic = "0.3.0rc8"
