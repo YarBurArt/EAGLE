@@ -4971,5 +4971,5 @@ reference = "mirror"
 
 [metadata]
 lock-version = "2.1"
-python-versions = "^3.14"
-content-hash = "4b2558862c81faa4f53a4d326a1311c54da20e2c7f617065e7f40d617e3c30d7"
+python-versions = ">=3.14,<4.0"
+content-hash = "cf3ed40ab4488945167fce2af36e427f5bc599e4282c65f03b34b2ddf6fe2f09"
