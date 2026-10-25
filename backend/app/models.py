@@ -52,8 +52,8 @@ class User(Base):
         String(256), nullable=False, unique=True, index=True
     )
     hashed_password: Mapped[str] = mapped_column(String(128), nullable=False)
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="user")
-    attack_chain: Mapped[list["AttackChain"]] = relationship(back_populates="user")
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(back_populates="user")
+    attack_chain: Mapped[list[AttackChain]] = relationship(back_populates="user")
 
 
 class RefreshToken(Base):
@@ -68,7 +68,7 @@ class RefreshToken(Base):
     user_id: Mapped[str] = mapped_column(
         ForeignKey("user_account.user_id", ondelete="CASCADE"),
     )
-    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+    user: Mapped[User] = relationship(back_populates="refresh_tokens")
 
 
 class AttackChain(Base):
@@ -80,12 +80,10 @@ class AttackChain(Base):
     )
     chain_name: Mapped[str] = mapped_column(String(256), nullable=False, unique=True)
     final_status: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
-    user: Mapped["User"] = relationship(back_populates="attack_chain")
-    attack_step: Mapped[list["AttackStep"]] = relationship(
-        back_populates="attack_chain"
-    )
+    user: Mapped[User] = relationship(back_populates="attack_chain")
+    attack_step: Mapped[list[AttackStep]] = relationship(back_populates="attack_chain")
     # audit may take several days, so storing it in the database is easier
-    current_phase: Mapped["CurrentAttackPhase"] = relationship(
+    current_phase: Mapped[CurrentAttackPhase] = relationship(
         back_populates="attack_chain",
         uselist=False,  # each chain has only one current phase.
         cascade="all, delete-orphan",  # del if c_phase is null
@@ -118,8 +116,8 @@ class AttackStep(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    attack_chain: Mapped["AttackChain"] = relationship(back_populates="attack_step")
-    agent: Mapped[list["Agent"]] = relationship(back_populates="attack_step")
+    attack_chain: Mapped[AttackChain] = relationship(back_populates="attack_step")
+    agent: Mapped[list[Agent]] = relationship(back_populates="attack_step")
 
 
 class CurrentAttackPhase(Base):
@@ -138,7 +136,7 @@ class CurrentAttackPhase(Base):
         index=True,
     )
     # and update_time from base
-    attack_chain: Mapped["AttackChain"] = relationship(back_populates="current_phase")
+    attack_chain: Mapped[AttackChain] = relationship(back_populates="current_phase")
 
 
 class Agent(Base):
@@ -155,4 +153,4 @@ class Agent(Base):
     callback_display_id: Mapped[int] = mapped_column(
         Integer, nullable=False, unique=False
     )
-    attack_step: Mapped["AttackStep"] = relationship(back_populates="agent")
+    attack_step: Mapped[AttackStep] = relationship(back_populates="agent")

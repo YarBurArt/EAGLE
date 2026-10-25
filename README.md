@@ -19,9 +19,9 @@ The project is developed using `FastAPI` + `PostgreSQL` (`SQLAlchemy 2.0` + `ale
 So far, this has been tested on latest `Kali Linux` and `Parrot OS`. Debian, if the version is lower than 13, may need to build new python [from source](https://docs.python.org/3/using/unix.html#building-python
 ). The latest `Astra Linux` (Debian 10-12 with MAC policy) have the same problem, but for some reason install_docker_kali.sh works for the mythic, and it even considers the mythic and EAGLE containers secure. EAGLE itself can also work if mythic is on a remote host, zero agent is on another, and postgres is not in the container. On Windows, it is easiest to run it via `WSL2` on Ubuntu or Kali.
 
-The main requirement is `python3.13` and above.
+The main requirement is `python3.14` and above.
 
-If you decide not to deploy using Docker, you should use `PostgreSQL 17`.
+If you decide not to deploy using Docker, you should use `PostgreSQL 18`.
 
 The minimum RAM requirement is 4-8GB, but 16GB is recommended due to agents, profiles from Mythic C2, and zero agent itself.
 A minimum dual-core CPU , but it 's difficult with containers.
@@ -70,10 +70,10 @@ Otherwise, the values will be taken from the [config](https://github.com/eogod/E
 
 Install dependencies
 ```bash
-# Poetry install (python3.13)
+# Poetry install (python3.14)
 poetry install
 # or on debian / parrot
-python3.13 -m poetry install
+python3.14 -m poetry install
 ```
 If it throws an error (like on the kali 2023-2024), then it might help:
 ```bash
@@ -86,14 +86,14 @@ Setup database and migrations
 # Setup database
 docker-compose up -d
 
-python3.13 -m poetry shell
+python3.14 -m poetry shell
 
 # Run Alembic migrations for DB changes
 alembic upgrade head
 ```
 Run backend FastAPI
 ```bash
-python3.13 -m poetry shell  # if you exited
+python3.14 -m poetry shell  # if you exited
 
 # not secure but for tests 
 uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000

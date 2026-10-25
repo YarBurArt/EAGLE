@@ -14,9 +14,9 @@
 На данный момент тестирование проводилось в основном на последних версиях `Kali Linux` и `Parrot OS`. Debian с версией ниже 13 может потребовать [сборки нового Python](https://docs.python.org/3/using/unix.html#building-python
 ) из исходников. Последние версии `Astra Linux` (Debian 10-12 с политикой МКЦ/МРД) имеют такую же проблему, но по какой-то причине скрипт install_docker_kali.sh работает для mythic, и даже считает контейнеры mythic и EAGLE безопасными. EAGLE также может работать, если mythic находится на удаленном хосте, нулевой агент - на другом, а PostgreSQL не находится в контейнере. В Windows проще всего запускать через `WSL2` на Ubuntu или Kali.
 
-Основное требование - `python3.13` и выше.
+Основное требование - `python3.14` и выше.
 
-Если вы решите не использовать Docker, следует применять `PostgreSQL 17`.
+Если вы решите не использовать Docker, следует применять `PostgreSQL 18`.
 
 Минимальные требования к оперативной памяти - 4-8 ГБ, но рекомендуется 16 ГБ из-за агентов, профилей Mythic C2 и самого нулевого агента.
 Минимум - двухъядерный процессор, хотя с контейнерами это может быть затруднительно.
@@ -70,10 +70,10 @@ LLMSERVICE__DEFAULT_MODEL=mistral
 
 Установка зависимостей
 ```bash
-# Poetry установка зависимостей из .lock (python3.13)
+# Poetry установка зависимостей из .lock (python3.14)
 poetry install
 # или на debian / parrot
-python3.13 -m poetry install
+python3.14 -m poetry install
 ```
 Если возникает ошибка (например как на Kali 2023-2024), то может помочь:
 ```bash
@@ -86,14 +86,14 @@ source env/bin/activate
 # если без докера - ищите в доках дистрибутива
 docker-compose up -d
 
-python3.13 -m poetry shell
+python3.14 -m poetry shell
 
 # запуск Alembic для применения изменений в бдшке
 alembic upgrade head
 ```
 Запуск backend FastAPI
 ```bash
-python3.13 -m poetry shell  # если выходили из нее
+python3.14 -m poetry shell  # если выходили из нее
 
 # это не безопасно, но без фронта временное решение
 uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000
