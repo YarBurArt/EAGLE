@@ -12,11 +12,11 @@ from dataclasses import dataclass
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from app.cmd.c2_tool import AgentCommandOutput, MythicClient
+from app.cmd.c2_tool import MythicClient
 from app.cmd.llm_analysis import llm_service
 from app.core.config import PHASE_COMMANDS, UNSAFE_CMD, phase_prompts
 from app.core.llm_templ import LLMTemplates
-from app.models import Agent, AttackStep
+from app.models import Agent, AttackStep, MythicTask
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,9 @@ async def init_agent():
     pass
 
 
+# TODO phase b: mission-driven llm agent (pentest this host with this CVE
+# by this plan) decides each command by itself with live task results,
+# chain record should be generated during/after execution, not before
 async def process_approved_cmd(
     cmd: str,
     ctx: ChainContext,
@@ -69,7 +72,9 @@ async def process_approved_cmd(
     mythic_client: MythicClient | None = None,
 ):
     """based on PHASE_COMMANDS and c2_tool defs it route cmd and execute
-    no db changes to AttackStep by default cuz it depends on tasks"""
+    no db changes to AttackStep by default cuz it depends on tasks,
+    returns (AttackStep|result, llm, agent, MythicTask|None),
+    tracker of MythicTask saved by events service via redis"""
     # tool_name like agent_libinject or local_impacket-wmiexec
     type_n, tool_n = cb.tool_name.split("_", 1)
     supported_type_n = ["local", "agent", "custom", "payload", "getcallback"]
@@ -83,13 +88,13 @@ async def process_approved_cmd(
         payload_params = PayloadParams()
 
     if type_n == "local":
-        result, llm_a = await check_and_process_local_cmd(
+        result, llm_a, m_task = await check_and_process_local_cmd(
             cmd=cmd,
             display_id=cb.display_id,
             ctx=ctx,
             mythic_client=mythic_client,
         )
-        return result, llm_a, ""
+        return result, llm_a, "", m_task
     if type_n == "payload":
         result, llm_a = await check_and_create_mpayload(
             ctx,
@@ -98,7 +103,7 @@ async def process_approved_cmd(
             payload_params,
             mythic_client,
         )
-        return result, llm_a, ""
+        return result, llm_a, "", None
     if type_n == "getcallback":
         result, agent = await process_new_callback(
             ctx,
@@ -107,15 +112,15 @@ async def process_approved_cmd(
             1,
             mythic_client,
         )
-        return result, "", agent
+        return result, "", agent, None
     if type_n == "agent":
-        result, llm_a, agent = await check_and_process_agent_cmd(
+        result, llm_a, agent, m_task = await check_and_process_agent_cmd(
             cb,
             ctx,
             cmd,
             mythic_client,
         )
-        return result, llm_a, agent
+        return result, llm_a, agent, m_task
     if type_n == "custom":
         # any other scenarios based on custom C2 functions in c2_tool
         if not hasattr(mythic_client, tool_n):
@@ -126,7 +131,7 @@ async def process_approved_cmd(
         # check object from tuple for class, ret like 'status raw_log'
         strings_out = " ".join(i for i in result if isinstance(i, str))
         llm_analysis = await analyze_command_output_with_llm(strings_out, cmd)
-        return result, llm_analysis, ""
+        return result, llm_analysis, "", None
 
 
 async def process_new_callback(
@@ -165,15 +170,17 @@ async def check_and_process_agent_cmd(
     cmd: str,
     mythic_client: MythicClient,
     is_analyze_llm: bool = False,
-) -> tuple[AttackStep, str, Agent]:
-    """run commands on agent and return output based on tool"""
+) -> tuple[AttackStep, str, Agent | str, MythicTask]:
+    """run commands on agent and return ticket for tracking,
+    output updates by events service, analysis by explicit endpoint"""
     _, tool_n = cb.tool_name.split("_", 1)
     if cmd in UNSAFE_CMD:
         raise HTTPException(400, "bro, this is unsafe command for sure")
     try:
-        result = await mythic_client.execute_agent_command(
-            cmd=tool_n,
-            params=cmd,  # basically in local_cmd is also params
+        # submit task to C2, ticket tracks live status
+        ticket = await mythic_client.issue_task_async(
+            command_name=tool_n,
+            parameters=cmd,  # basically in local_cmd is also params
             callback_display_id=cb.display_id,
         )  # by llm cmd based on get_cmd_list...
     except Exception as e:  # general exception cuz mythic lib
@@ -190,28 +197,31 @@ async def check_and_process_agent_cmd(
             " but you can bypass this issue using agent commands"
             " and shell scripts for long time tasks.",
         ) from e
-    llm_analysis = (
-        await analyze_command_output_with_llm(result.output, cmd)
-        if is_analyze_llm
-        else ""
-    )
     # for reproducibility
     rhost, agent_os, agent_status = await mythic_client.get_os_by_display_id(
         cb.display_id
     )
+    p_id, p_uuid = await mythic_client.get_payload_ids(cb.display_id)
+    step = AttackStep(
+        phase=ctx.phase_name,
+        chain_id=ctx.chain_id,
+        status="submitted",
+        tool_name=cb.tool_name,
+        command=cmd,
+        mythic_task_id=ticket.mythic_task_id,
+        mythic_payload_id=p_id,
+        mythic_payload_uuid=str(p_uuid),
+        raw_log="",
+    )
+    mythic_task = MythicTask(
+        mythic_task_id=ticket.mythic_task_id,
+        step_id=0,  # set after AttackStep saved, by service layer
+        status="submitted",
+        auto_analyze=is_analyze_llm,
+    )
     return (
-        AttackStep(
-            phase=ctx.phase_name,
-            chain_id=ctx.chain_id,
-            status="success",
-            tool_name=cb.tool_name,
-            command=cmd,
-            mythic_task_id=result.mythic_task_id,
-            mythic_payload_id=result.mythic_payload_id,
-            mythic_payload_uuid=result.mythic_payload_uuid,
-            raw_log=result.output,
-        ),
-        llm_analysis,
+        step,
+        "",
         Agent(
             step_id=1,  # need update in tasks
             os_type=agent_os,
@@ -219,6 +229,7 @@ async def check_and_process_agent_cmd(
             agent_name=str(cb.display_id) + "#" + rhost,
             callback_display_id=cb.display_id,
         ),
+        mythic_task,
     )
 
 
@@ -235,7 +246,7 @@ async def check_and_create_mpayload(
         raise HTTPException(
             400, detail="OS type not supported, try closest one like Linux"
         )
-    # TODO: set port/os by C2, get information about agents profile
+    # TODO set port/os by C2, get information about agents profile
     file_name = tool_n + hashlib.md5(
         str(time.time()).encode("utf-8"), usedforsecurity=False
     )
@@ -246,7 +257,7 @@ async def check_and_create_mpayload(
         lport=payload_params.lport,
         os_type=payload_params.os_type,  # host from default
     )
-    llm_analysis = await analyze_command_output_with_llm(result.raw_log, cmd)
+    # build goes async, watcher in events service updates step like all others
     return AttackStep(
         chain_id=ctx.chain_id,
         tool_name=tool_name,
@@ -254,10 +265,10 @@ async def check_and_create_mpayload(
         mythic_task_id=0,
         command=cmd,
         mythic_payload_id=result.payload_id,
-        mythic_payload_uuid=result.payload_uuid,
+        mythic_payload_uuid=str(result.payload_uuid),
         status=result.status,
-        raw_log=result.raw_log,
-    ), llm_analysis
+        raw_log="",
+    ), ""
 
 
 async def get_agent_status(
@@ -274,16 +285,15 @@ async def check_and_process_local_cmd(
     ctx: ChainContext,
     mythic_client: MythicClient,
     is_analyze_llm: bool = False,
-) -> tuple[AttackStep, str]:
+) -> tuple[AttackStep, str, MythicTask]:
     """async function for check is safe command ->
-    execute on zero agent, formatting to AttackStep"""
+    submit on zero agent, formatting to AttackStep with ticket,
+    output updates by events service, analysis by explicit endpoint"""
     if cmd in UNSAFE_CMD:
         raise HTTPException(400, "bro, this is unsafe command for sure")
     try:
-        # send command to C2
-        ex_result: AgentCommandOutput = await mythic_client.execute_local_command(
-            cmd, display_id
-        )
+        # submit command to C2, ticket tracks live status
+        ticket = await mythic_client.issue_task_async("shell", cmd, display_id)
     except Exception as e:
         logger.error(
             "local command failed for display %s: %s", display_id, e, exc_info=True
@@ -294,24 +304,26 @@ async def check_and_process_local_cmd(
             " but you can bypass this issue using bash scripts"
             " for long time tasks.",
         ) from e
-    llm_analysis = (
-        await analyze_command_output_with_llm(ex_result.output, cmd)
-        if is_analyze_llm
-        else ""
-    )
+    p_id, p_uuid = await mythic_client.get_payload_ids(display_id)
 
     attack_step = AttackStep(
         chain_id=ctx.chain_id,
         phase=ctx.phase_name,
         tool_name="local_" + cmd.split(maxsplit=1)[0],
         command=cmd,
-        mythic_task_id=ex_result.mythic_task_id,
-        mythic_payload_uuid=ex_result.mythic_payload_uuid,
-        mythic_payload_id=ex_result.mythic_payload_id,
-        raw_log=ex_result.output,
-        status="success",
+        mythic_task_id=ticket.mythic_task_id,
+        mythic_payload_uuid=str(p_uuid),
+        mythic_payload_id=p_id,
+        raw_log="",
+        status="submitted",
     )
-    return attack_step, llm_analysis
+    mythic_task = MythicTask(
+        mythic_task_id=ticket.mythic_task_id,
+        step_id=0,  # set after AttackStep saved, by service layer
+        status="submitted",
+        auto_analyze=is_analyze_llm,
+    )
+    return attack_step, "", mythic_task
 
 
 async def analyze_command_output_with_llm(output: str, command: str) -> str:
