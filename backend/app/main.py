@@ -19,6 +19,7 @@ from app.api.deps import ChainController
 from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
+from app.cmd.mythic_events import MythicEventsService
 from app.core.config import DEBUG_MODE_C, get_settings
 from app.mitre_loader import build_apt_chain_index, load_attack_graph
 from app.services.ttp_info_service import TTPInfoService
@@ -32,6 +33,7 @@ _mcp_session_manager = eagle_mcp._lowlevel_server._session_manager
 async def lifespan(app: FastAPI):
     """create and manage services for C2"""
     mythic_client = MythicClient()
+    events_service = MythicEventsService()
     try:
         await mythic_client.connect()
     except Exception as e:
@@ -39,8 +41,14 @@ async def lifespan(app: FastAPI):
             "\033[1;33mWARNING:   \033[0mok, you can test some without mythic because",
             e,
         )
+    # same websocket reused for task status events by events service
+    events_service.bind_client(mythic_client)
+    mythic_client.bind_events(events_service)
+    await events_service.start()
     app.state.mythic_client = mythic_client
+    app.state.events_service = events_service
     app.state.chain_controller = ChainController()
+    tasks_mcp._events_service = events_service
 
     # load MITRE ATT&CK data for TTP queries in MCP
     settings = get_settings()
@@ -66,6 +74,7 @@ async def lifespan(app: FastAPI):
     async with _mcp_session_manager.run():
         yield
 
+    await events_service.stop()
     await mythic_client.disconnect()
 
 

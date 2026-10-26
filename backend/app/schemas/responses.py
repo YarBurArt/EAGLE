@@ -47,6 +47,7 @@ class LocalCommandResponse(BaseResponse):
     user_id: UUID4
     chain_name: str
     callback_display_id: int
+    step_id: int | None
     mythic_task_id: int
     tool_name: str
     command: str
@@ -97,6 +98,7 @@ class NewAgentResponse(BaseResponse):
 class NewPayloadResponse(BaseResponse):
     chain_id: int
     status: str
+    step_id: int | None
     phase: str
     payload_type: str | None  # based on os
     payload_uuid: str | UUID4

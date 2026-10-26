@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api import deps
 from app.api.deps import ChainController, get_chain_controller
+from app.cmd.mythic_events import MythicEventsService
 from app.models import User
 from app.schemas.requests import (
     ActionApprovalRequest,
@@ -48,6 +49,7 @@ from app.services.s_deps import (
     get_chain_execution_service,
     get_chain_service,
     get_command_service,
+    get_events_service,
 )
 
 router = APIRouter()
@@ -199,6 +201,52 @@ async def read_agent_status(
     command_service: CommandsC2ExecService = Depends(get_command_service),
 ) -> str:
     return await command_service.get_agent_status(display_id)
+
+
+@router.get(
+    "/step/{step_id}",
+    description="Snapshot of step & mythic task statuses from db",
+)
+async def read_step_snapshot(
+    step_id: int,
+    command_service: CommandsC2ExecService = Depends(get_command_service),
+) -> dict[str, Any]:
+    return await command_service.get_step_with_tasks(step_id)
+
+
+@router.get(
+    "/step/{step_id}/events",
+    description="Live events of step & mythic tasks via redis stream,"
+    " ndjson, ends after output & analysis got calm",
+)
+async def step_events(  # noqa: PLR0913, PLR0917
+    step_id: int,
+    command_service: CommandsC2ExecService = Depends(get_command_service),
+    events_service: MythicEventsService = Depends(get_events_service),
+) -> StreamingResponse:
+    snapshot = await command_service.get_step_with_tasks(step_id)
+    # stream protocol (terminal/grace/idle) lives in the events service
+    return StreamingResponse(
+        events_service.stream_step_events(step_id, snapshot),
+        media_type="application/json",
+    )
+
+
+@router.post(
+    "/step/{step_id}/analyze",
+    description="Explicit llm analysis of the step output,"
+    " result saved to db & mirrored to the events stream",
+)
+async def analyze_step(
+    step_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    command_service: CommandsC2ExecService = Depends(get_command_service),
+    events_service: MythicEventsService = Depends(get_events_service),
+) -> dict[str, Any]:
+    result = await command_service.analyze_step(step_id, current_user)
+    if events_service.available:
+        await events_service.emit_analysis(step_id, result["llm_analysis"])
+    return result
 
 
 @router.get(
@@ -389,9 +437,11 @@ async def approve_action_from_llm(
         )
         return {
             "success": True,
-            "attack_step": result["attack_step"],
-            "llm_analysis": result["llm_analysis"],
-            "message": "Action executed and saved successfully",
+            "step_id": result.get("attack_step_id"),
+            "status": result.get("status"),
+            "mythic_task_id": result.get("mythic_task_id"),
+            "llm_analysis": result.get("llm_analysis"),
+            "message": "Action submitted, track by step events stream",
         }
     except Exception as e:
         raise HTTPException(

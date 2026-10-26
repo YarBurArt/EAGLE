@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -16,6 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
 from app.cmd.c2_tool import MythicClient
+from app.cmd.mythic_events import MythicEventsService
 from app.core import database_session
 from app.core.security.jwt import create_jwt_token, verify_jwt_token
 from app.core.security.password import verify_password
@@ -25,6 +27,9 @@ from app.services.chain_exec_service import ChainExecutionService
 from app.services.chain_service import ChainService
 from app.services.payload_service import AgentPayloadService
 from app.services.ttp_info_service import TTPInfoService
+
+# ref of this module, main lifespan attaches _events_service to it
+_this_mcp_module = sys.modules[__name__]
 
 mcp = MCPServer(
     "EAGLE MCP",
@@ -215,6 +220,34 @@ async def get_agent_status(display_id: int) -> str:
     async with database_session.get_async_session() as session:
         cmd_svc = CommandsC2ExecService(session, ctx.mythic)
         return await cmd_svc.get_agent_status(display_id)
+
+
+def _events_service() -> MythicEventsService | None:
+    """events service shared from main lifespan for task status tools"""
+    return getattr(_this_mcp_module, "_events_service", None)
+
+
+@mcp.tool()
+async def get_task_status(mythic_task_id: int) -> dict[str, Any]:
+    """Current status of a Mythic task by ticket (mythic_task_id from any run_* tool).
+    Live from redis, like ['status': 'running'|'completed'|'failed']. Poll this after run commands for long operations instead of blocking."""
+    events = _events_service()
+    if not events or not events.available:
+        return {"mythic_task_id": mythic_task_id, "status": "unknown"}
+    r = await events.get_task_status(mythic_task_id)
+    return {"mythic_task_id": mythic_task_id, **(r or {"status": "unknown"})}
+
+
+@mcp.tool()
+async def wait_task(mythic_task_id: int, timeout: int = 300) -> dict[str, Any]:
+    """Bounded wait for a Mythic task to reach terminal status (max timeout secs, keep 30-600). Returns final status like 'completed'/'failed'/'timeout'. Prefer get_task_status polling over very long waits."""
+    events = _events_service()
+    if not events or not events.available:
+        return {"mythic_task_id": mythic_task_id, "status": "unknown"}
+    # the agent does not really know realtime, cap the wait
+    timeout = min(max(int(timeout or 300), 1), 600)
+    status_out = await events.wait_for_task(mythic_task_id, timeout=timeout)
+    return {"mythic_task_id": mythic_task_id, "status": status_out}
 
 
 @mcp.tool()

@@ -63,6 +63,16 @@ def get_mythic_client(request: Request):
     return client
 
 
+def get_events_service(request: Request):
+    """inject MythicEventsService from app.state"""
+    from app.cmd.mythic_events import MythicEventsService  # noqa: PLC0415
+
+    service = request.app.state.events_service
+    if not isinstance(service, MythicEventsService):
+        raise ValueError("cannot get MythicEvents service")
+    return service
+
+
 def get_chain_controller(request: Request) -> ChainController:
     """inject ChainController from app.state"""
     controller = request.app.state.chain_controller
