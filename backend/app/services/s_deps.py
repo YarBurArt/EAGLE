@@ -2,7 +2,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.api.deps import get_mythic_client
+from app.api.deps import get_events_service, get_mythic_client
 from app.cmd.c2_tool import MythicClient
 from app.services.c2_service import CommandsC2ExecService
 from app.services.chain_exec_service import ChainExecutionService
@@ -35,3 +35,12 @@ async def get_chain_execution_service(
     mythic_client: MythicClient = Depends(get_mythic_client),
 ) -> ChainExecutionService:
     return ChainExecutionService(session, mythic_client)
+
+
+__all__ = [
+    "get_agent_payload_service",
+    "get_chain_execution_service",
+    "get_chain_service",
+    "get_command_service",
+    "get_events_service",
+]

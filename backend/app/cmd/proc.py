@@ -61,9 +61,8 @@ async def init_agent():
     pass
 
 
-# TODO phase b: mission-driven llm agent (pentest this host with this CVE
-# by this plan) decides each command by itself with live task results,
-# chain record should be generated during/after execution, not before
+# TODO: task output arrives only via the events service after submit, so
+# nothing feeds live results back and the chain is pre-assembled, idk
 async def process_approved_cmd(
     cmd: str,
     ctx: ChainContext,

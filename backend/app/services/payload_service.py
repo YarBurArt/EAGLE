@@ -52,6 +52,7 @@ class AgentPayloadService:
         download_url = f"https://{ip}:{port}/direct/download/{uuid}"
         return {
             "chain_id": chain_id,
+            "step_id": payload_step.id,
             "status": payload_step.status,
             "phase": payload_step.phase,
             "download_url": download_url,

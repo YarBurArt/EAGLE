@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import select
@@ -14,6 +15,8 @@ from app.cmd.proc import (
 )
 from app.core import database_session
 from app.models import Agent, AttackStep
+
+logger = logging.getLogger(__name__)
 
 
 class ChainExecutionService:
@@ -43,23 +46,47 @@ class ChainExecutionService:
                     p_os_type = "Windows"
                 ctx = ChainContext(chain_id=step.chain_id, phase_name=step.phase)
                 cb = CallbackInfo(display_id=display_id, tool_name=step.tool_name)
-                result, llm_a, _ = await process_approved_cmd(
+                result, llm_a, agent_c, mythic_task = await process_approved_cmd(
                     cmd=step.command,
                     ctx=ctx,
                     cb=cb,
                     payload_params=PayloadParams(os_type=p_os_type),
                     mythic_client=self.mythic_client,
                 )
-                resp_step = {
-                    "step_id": result.id,
-                    "chain_id": result.chain_id,
-                    "phase": result.phase,
-                    "tool_name": result.tool_name,
-                    "mythic_payload_uuid": result.mythic_payload_uuid,
-                    "status": result.status,
-                    "raw_log": result.raw_log,
-                    "command": result.command,
-                }
+                # custom steps return raw tuples, not steps, keep them as is
+                if isinstance(result, AttackStep):
+                    self.session.add(result)
+                    try:
+                        await self.session.commit()
+                        if mythic_task is not None:
+                            mythic_task.step_id = result.id
+                            self.session.add(mythic_task)
+                            await self.session.commit()
+                    except Exception as e:
+                        logger.warning("chain step %s save failed: %s", step.id, e)
+                if isinstance(result, AttackStep):
+                    resp_step = {
+                        "step_id": result.id,
+                        "chain_id": result.chain_id,
+                        "phase": result.phase,
+                        "tool_name": result.tool_name,
+                        "mythic_payload_uuid": result.mythic_payload_uuid,
+                        "status": result.status,
+                        "raw_log": result.raw_log,
+                        "command": result.command,
+                    }
+                else:
+                    # custom step types return raw results without a row
+                    resp_step = {
+                        "step_id": None,
+                        "chain_id": step.chain_id,
+                        "phase": step.phase,
+                        "tool_name": step.tool_name,
+                        "mythic_payload_uuid": None,
+                        "status": "executed",
+                        "raw_log": " ".join(i for i in result if isinstance(i, str)),
+                        "command": step.command,
+                    }
                 out_d = {
                     "AttackStep": resp_step,
                     "llm_analysis": llm_a,
@@ -70,5 +97,5 @@ class ChainExecutionService:
     def get_sorted_steps(steps: list[AttackStep]) -> list[AttackStep]:
         return sorted(
             (s for s in steps if s.status == "success"),
-            key=lambda step: step.update_time,
+            key=lambda step: step.executed_at,
         )
