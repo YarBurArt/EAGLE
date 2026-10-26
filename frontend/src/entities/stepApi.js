@@ -21,6 +21,48 @@ export const stepApi = {
       is_analyze_llm,
     }),
 
+  getStep: (stepId) => api.get(`${BASE}/step/${stepId}`).then((res) => res.data),
+
+  analyzeStep: (stepId) => api.post(`${BASE}/step/${stepId}/analyze`).then((res) => res.data),
+
+  // live ndjson events of step & mythic tasks, fetch instead of EventSource
+  // cuz it cannot send Authorization headers (TODO: rewrite auth to cookies)
+  streamStepEvents: (stepId, onEvent, signal) =>
+    fetch(`${BASE}/step/${stepId}/events`, {
+      signal,
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
+      },
+    }).then(async (resp) => {
+      if (!resp.ok || !resp.body) throw new Error(`step events status ${resp.status}`)
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split('\n')
+        buf = lines.pop()
+        lines.forEach((line) => {
+          if (!line.trim()) return
+          try {
+            onEvent(JSON.parse(line))
+          } catch {
+            // partial or broken row, skip it
+          }
+        })
+      }
+      if (buf.trim()) {
+        try {
+          onEvent(JSON.parse(buf))
+        } catch {
+          // leftover without newline
+        }
+      }
+      return resp
+    }),
+
   deleteStep: (stepId) => api.delete(`${BASE}/step/${stepId}`).then((res) => res.data),
 
   updateStep: (stepId, patch) => api.patch(`${BASE}/step/${stepId}`, patch).then((res) => res.data),

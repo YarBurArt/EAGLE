@@ -28,7 +28,7 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
   const startTimeRef = useRef(null)
   const intervalRef = useRef(null)
 
-  // TODO: fix this workaround, read run status by WS
+  // backend drives run state by events stream, here just elapsed clock
   useEffect(() => {
     if (step.status === STEP_STATUS.RUNNING) {
       startTimeRef.current = Date.now()
@@ -48,8 +48,6 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
       }
     }
   }, [step.status])
-
-  const TIMEOUT_WARNING = 300
 
   const autoResize = (el) => {
     if (!el) return
@@ -148,18 +146,9 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
           />
           {step.status === STEP_STATUS.RUNNING && (
             <div className="mt-2">
-              <div className="h-[2px] w-full rounded bg-default overflow-hidden">
-                {/* progress bar */}
-                <div
-                  className="h-full rounded bg-blue-500 transition-all"
-                  style={{ width: `${Math.min((elapsed / TIMEOUT_WARNING) * 100, 100)}%` }}
-                />
+              <div className="text-[10px] font-mono text-muted">
+                elapsed {elapsed}s, live output goes by events stream
               </div>
-              {elapsed >= TIMEOUT_WARNING && (
-                <div className="mt-1 text-[10px] text-warning">
-                  Check C2 or backend logs, command is taking too long
-                </div>
-              )}
             </div>
           )}
         </>
