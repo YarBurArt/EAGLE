@@ -83,55 +83,55 @@ export const useRunStep = () => {
 
       const controller = new AbortController()
       let resolved = false
-      await stepApi.streamStepEvents(
-        data.step_id,
-        (event) => {
-          if (resolved) return
-          const kind = event.event
-          if (kind === 'snapshot') return
-          if (kind === 'output') {
-            resolved = true
-            controller.abort()
-            onUpdate?.(id, {
-              status: STEP_STATUS.SUCCESS,
-              raw_log: cleanBytesOutput(event.raw_log ?? ''),
-            })
-            return
-          }
-          if (kind === 'build' && event.status) {
-            onUpdate?.(id, {
-              status:
-                event.status === 'success' ? STEP_STATUS.SUCCESS : STEP_STATUS.RUNNING,
-              raw_log: event.status === 'success' ? cleanBytesOutput(event.raw_log ?? '') : '',
-            })
-            if (event.status === 'success') {
-              resolved = true
-              controller.abort()
-            }
-            return
-          }
-          if (kind === 'status') {
-            if (event.completed || event.status === 'failed') {
+      await stepApi
+        .streamStepEvents(
+          data.step_id,
+          (event) => {
+            if (resolved) return
+            const kind = event.event
+            if (kind === 'snapshot') return
+            if (kind === 'output') {
               resolved = true
               controller.abort()
               onUpdate?.(id, {
-                status:
-                  event.status === 'completed' ? STEP_STATUS.SUCCESS : STEP_STATUS.ERROR,
-                raw_log: event.status === 'completed' ? '' : event.status,
+                status: STEP_STATUS.SUCCESS,
+                raw_log: cleanBytesOutput(event.raw_log ?? ''),
               })
               return
             }
-            onUpdate?.(id, { status: STEP_STATUS.RUNNING })
+            if (kind === 'build' && event.status) {
+              onUpdate?.(id, {
+                status: event.status === 'success' ? STEP_STATUS.SUCCESS : STEP_STATUS.RUNNING,
+                raw_log: event.status === 'success' ? cleanBytesOutput(event.raw_log ?? '') : '',
+              })
+              if (event.status === 'success') {
+                resolved = true
+                controller.abort()
+              }
+              return
+            }
+            if (kind === 'status') {
+              if (event.completed || event.status === 'failed') {
+                resolved = true
+                controller.abort()
+                onUpdate?.(id, {
+                  status: event.status === 'completed' ? STEP_STATUS.SUCCESS : STEP_STATUS.ERROR,
+                  raw_log: event.status === 'completed' ? '' : event.status,
+                })
+                return
+              }
+              onUpdate?.(id, { status: STEP_STATUS.RUNNING })
+            }
+          },
+          controller.signal,
+        )
+        .catch((err) => {
+          // abort after terminal rows is the expected way out, anything else
+          // is a broken stream (drop, 4xx/5xx, dead backend), keep the state
+          if (err?.name !== 'AbortError') {
+            console.warn(`step ${data.step_id} events stream failed:`, err)
           }
-        },
-        controller.signal,
-      ).catch((err) => {
-        // abort after terminal rows is the expected way out, anything else
-        // is a broken stream (drop, 4xx/5xx, dead backend), keep the state
-        if (err?.name !== 'AbortError') {
-          console.warn(`step ${data.step_id} events stream failed:`, err)
-        }
-      })
+        })
 
       return data
     } catch (err) {
