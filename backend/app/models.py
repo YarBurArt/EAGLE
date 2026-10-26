@@ -111,6 +111,8 @@ class AttackStep(Base):
     )
     # raw command output from task, without llm
     raw_log: Mapped[str] = mapped_column(Text, nullable=True, unique=False)
+    # llm analysis of raw_log, run by explicit endpoint by agent/user
+    llm_analysis: Mapped[str] = mapped_column(Text, nullable=True, unique=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -118,6 +120,33 @@ class AttackStep(Base):
 
     attack_chain: Mapped[AttackChain] = relationship(back_populates="attack_step")
     agent: Mapped[list[Agent]] = relationship(back_populates="attack_step")
+    mythic_tasks: Mapped[list[MythicTask]] = relationship(back_populates="attack_step")
+
+
+class MythicTask(Base):
+    __tablename__ = "mythic_task"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # ticket from mythic issue_task, live status for it in redis by this id
+    mythic_task_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=True)
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("attack_step.id", ondelete="CASCADE"),
+    )
+    # submitted -> dispatched -> completed | errored, like mythic statuses
+    status: Mapped[str] = mapped_column(String(32), nullable=False, unique=False)
+    output: Mapped[str] = mapped_column(Text, nullable=True, unique=False)
+    # llm analysis after completed by events service, if asked at run
+    auto_analyze: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, unique=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True, unique=False
+    )
+
+    attack_step: Mapped[AttackStep] = relationship(back_populates="mythic_tasks")
 
 
 class CurrentAttackPhase(Base):

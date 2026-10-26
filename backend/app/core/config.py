@@ -75,6 +75,15 @@ class LLMservice(BaseModel):
     default_model: str = "mistral"
 
 
+class Redis(BaseModel):
+    """env format like REDIS__PASSWORD=..., for hot task events only"""
+
+    hostname: str = "localhost"
+    port: int = 6379
+    password: SecretStr = SecretStr("passwd-change-me")
+    events_ttl: int = 4 * 60 * 60  # ttl of hot state, db lives longer
+
+
 class Mitre(BaseModel):
     """env format like MITRE__ENTERPRISE_ATTACK_PATH=..."""
 
@@ -88,6 +97,7 @@ class Settings(BaseSettings):
     security: Security = Field(default_factory=Security)
     database: Database = Field(default_factory=Database)
     mythic: Mythic = Field(default_factory=Mythic)
+    redis: Redis = Field(default_factory=Redis)
     llmservice: LLMservice = Field(default_factory=LLMservice)
     mitre: Mitre = Field(default_factory=Mitre)
 
