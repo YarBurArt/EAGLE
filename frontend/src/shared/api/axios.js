@@ -1,26 +1,45 @@
 import axios from 'axios'
 
+// session lives in HttpOnly cookies set by the backend
 export const api = axios.create({
   baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  withCredentials: true,
 })
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
+// one shared refresh, so parallel 401s do not race two rotations
+// (a lost race would trip the reused-token family wipe on the server)
+let refreshInFlight = null
+
+const runSilentRefresh = () => {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = api
+    .post('/auth/refresh-token', { _retried: true })
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      refreshInFlight = null
+    })
+  return refreshInFlight
+}
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+  async (error) => {
+    const config = error.config
+    const status = error.response?.status
+    // auth calls fail for real (bad password / replayed refresh), straight to login
+    if (
+      status === 401 &&
+      config &&
+      !config._retried &&
+      !['/auth/access-token', '/auth/refresh-token', '/auth/logout'].includes(config.url)
+    ) {
+      config._retried = true
+      if (await runSilentRefresh()) {
+        return api.request(config)
+      }
+    }
+    if (status === 401) {
       window.location.href = '/login'
     }
     return Promise.reject(error)

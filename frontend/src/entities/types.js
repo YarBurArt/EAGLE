@@ -38,4 +38,5 @@ export const STEP_STATUS = {
 export const STEP_TYPES = {
   LOCAL: 'local',
   AGENT: 'agent',
+  BASH: 'bash',
 }
