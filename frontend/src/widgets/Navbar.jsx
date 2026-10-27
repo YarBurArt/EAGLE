@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ListIcon } from '@phosphor-icons/react'
 import { ChainPopup } from './ChainPopup'
 import { chainApi } from '../entities/chainApi'
+import { api } from '../shared/api/axios'
 import { toast } from 'react-toastify'
 import { useMinify } from '../context/useMinify.js'
 
@@ -57,9 +58,13 @@ export const NavBar = ({ onSelect, onCreateChain, onDeleteChain, chains = [], cu
     toggle()
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+  const handleLogout = async () => {
+    // cookie session: revoke refresh server side, cookies die with the response
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      // logout best-effort, cookie clearing happens server side
+    }
     window.location.href = '/login'
   }
 

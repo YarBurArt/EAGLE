@@ -23,10 +23,13 @@ const statusMeta = {
 export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
   const cmdRef = useRef(null)
   const outRef = useRef(null)
+
   const { minified } = useMinify()
   const [elapsed, setElapsed] = useState(0)
   const startTimeRef = useRef(null)
   const intervalRef = useRef(null)
+  const isAgent = step.step_type === STEP_TYPES.AGENT
+  const isBash = step.step_type === STEP_TYPES.BASH
 
   // backend drives run state by events stream, here just elapsed clock
   useEffect(() => {
@@ -61,7 +64,6 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
   }, [step.command, step.command_params, step.raw_log])
 
   const meta = statusMeta[step.status] ?? statusMeta.pending
-  const isAgent = step.step_type === STEP_TYPES.AGENT
 
   return (
     <div className="mb-2 rounded-md border border-subtle bg-card p-2.5 transition-colors hover:border-default">
@@ -73,25 +75,55 @@ export const StepCard = ({ step, onRun, onDelete, onCopy, onUpdate }) => {
           onChange={(e) => onUpdate(step.id ?? step._tempId, { step_type: e.target.value })}
           className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
         >
-          <option value={STEP_TYPES.LOCAL}>Local</option>
+          <option value={STEP_TYPES.LOCAL}>Local (C2)</option>
           <option value={STEP_TYPES.AGENT}>Agent</option>
+          <option value={STEP_TYPES.BASH} disabled>
+            Bash
+          </option>
         </Input>
 
-        <div className="flex items-center gap-1">
-          <label className="text-[10px] text-muted">C2 Display ID:</label>
-          <Input
-            type="text"
-            inputMode="numeric"
-            value={step.callback_display_id ?? 0}
+        {isBash ? (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-accent">
+            bash on host
+          </span>
+        ) : (
+          <div className="flex items-center gap-1">
+            <label className="text-[10px] text-muted">C2 Display ID:</label>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={step.callback_display_id ?? 0}
+              onChange={(e) =>
+                onUpdate(step.id ?? step._tempId, {
+                  callback_display_id: parseInt(e.target.value) || 0,
+                })
+              }
+              className="w-16 px-1.5 py-0.5 font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            />
+          </div>
+        )}
+
+        <label className="flex items-center gap-1 text-[10px] text-muted">
+          <input
+            type="checkbox"
+            checked={isBash}
             onChange={(e) =>
               onUpdate(step.id ?? step._tempId, {
-                callback_display_id: parseInt(e.target.value) || 0,
+                step_type: e.target.checked
+                  ? STEP_TYPES.BASH
+                  : isAgent
+                    ? STEP_TYPES.AGENT
+                    : STEP_TYPES.LOCAL,
               })
             }
-            className="w-16 px-1.5 py-0.5 font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="accent-current"
           />
-        </div>
+          Local command
+        </label>
       </div>
+
+      {/* TODO: remove manual actions from cards, chain autogeneration */}
+      {/* TODO: agent controls... like minimal chat */}
 
       {/* tool name depends on mythic agent tools and proc.py */}
       <TransparentInput

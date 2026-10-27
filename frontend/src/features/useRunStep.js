@@ -59,6 +59,14 @@ export const useRunStep = () => {
           is_analyze_llm: false,
         })
         data = res.data
+      } else if (step.step_type === STEP_TYPES.BASH) {
+        // same ticket + events flow as agent steps
+        const res = await stepApi.runBash({
+          chain_name: step.chain_name,
+          command: step.command,
+          timeout: 3600,
+        })
+        data = res.data
       } else {
         const res = await stepApi.runLocalCommand({
           chain_name: step.chain_name,
@@ -89,7 +97,25 @@ export const useRunStep = () => {
           (event) => {
             if (resolved) return
             const kind = event.event
-            if (kind === 'snapshot') return
+            if (kind === 'snapshot') {
+              // fast commands can finish before the stream attaches
+              const snap = event.step
+              if (!resolved && snap && ['success', 'fail', 'error'].includes(snap.status)) {
+                const out =
+                  (snap.bash_tasks || []).find((t) => t.output)?.output ??
+                  (snap.tasks || []).find((t) => t.output)?.output
+                if (out !== undefined) {
+                  resolved = true
+                  controller.abort()
+                  onUpdate?.(id, {
+                    status: snap.status === 'success' ? STEP_STATUS.SUCCESS : STEP_STATUS.ERROR,
+                    raw_log: cleanBytesOutput(out),
+                  })
+                  return
+                }
+              }
+              return
+            }
             if (kind === 'output') {
               resolved = true
               controller.abort()

@@ -11,6 +11,10 @@ export const stepApi = {
       is_analyze_llm,
     }),
 
+  runBash: ({ chain_name, command, timeout }) =>
+    // direct bash on host
+    api.post(`${BASE}/run-bash`, { chain_name, command, timeout }),
+
   runAgentCommand: ({ chain_name, callback_display_id, command_params, tool, is_analyze_llm }) =>
     api.post(`${BASE}/run-agent-command`, {
       chain_name,
@@ -25,14 +29,10 @@ export const stepApi = {
 
   analyzeStep: (stepId) => api.post(`${BASE}/step/${stepId}/analyze`).then((res) => res.data),
 
-  // live ndjson events of step & mythic tasks, fetch instead of EventSource
-  // cuz it cannot send Authorization headers (TODO: rewrite auth to cookies)
+  // live ndjson events of step & tasks, cookies ride along
   streamStepEvents: (stepId, onEvent, signal) =>
     fetch(`${BASE}/step/${stepId}/events`, {
       signal,
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`,
-      },
     }).then(async (resp) => {
       if (!resp.ok || !resp.body) throw new Error(`step events status ${resp.status}`)
       const reader = resp.body.getReader()

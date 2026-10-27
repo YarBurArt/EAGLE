@@ -13,14 +13,12 @@ export const Login = () => {
     setErr('')
     try {
       const body = new URLSearchParams({ username: email, password })
-      const { data } = await api.post('/auth/access-token', body, {
+      await api.post('/auth/access-token', body, {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
       })
-      // FIXME: possible CWE-922 for case CWE-79
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
+      // session lives in HttpOnly cookies set by the backend, no storage here
 
       navigate('/', { replace: true })
     } catch (err) {

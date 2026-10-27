@@ -34,7 +34,8 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
           const phaseName = step.phase
           const phaseObj = UCKC_PHASES.find((p) => p.name === phaseName)
           const phaseId = phaseObj ? phaseObj.id : phaseName
-          const isAgent = step.tool_name?.startsWith('agent_')
+          const isAgent = step.step_type === 'agent'
+          const rawType = step.step_type ?? STEP_TYPES.LOCAL
           if (!stepsByPhaseMap[phaseId]) {
             stepsByPhaseMap[phaseId] = []
             if (phaseObj) phasesFromSteps.push(phaseObj)
@@ -43,12 +44,12 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
           stepsByPhaseMap[phaseId].push({
             id: step.id,
             chain_name: currentChain.chain_name,
-            step_type: isAgent ? STEP_TYPES.AGENT : STEP_TYPES.LOCAL,
+            step_type: rawType,
             callback_display_id: step.callback_display_id ?? 0,
             tool_name: step.tool_name,
             command: isAgent ? '' : step.command,
             command_params: isAgent ? step.command : '',
-            tool: isAgent ? step.tool_name.replace('agent_', '') : 'shell',
+            tool: isAgent ? step.tool_name : 'shell',
             status: step.status,
             raw_log: step.raw_log,
           })
