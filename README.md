@@ -103,8 +103,16 @@ uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000
 
 By default, the application runs at **http://127.0.0.1:8000** and connects to `Mythic C2` on startup.
 At this URL you’ll find the API with a `Swagger UI`.  Frontend is on **/f/index** for now.
-Registration is available via **/auth/register** using email/password , this is required because AttackChains are attached to users by ID. After registering, you can log in and obtain a JWT token via **/auth/access-token** (or via Swagger auth).
+
+Open self-registration is off; accounts come from `.env` (`SECURITY__ADMIN_EMAIL` / `SECURITY__ADMIN_PASSWORD`, created on startup if missing), and the admin can add users via **/auth/register** (role system admin/operator/auditor is TODO). The browser session uses HttpOnly cookies set by **/auth/access-token**; `Authorization: Bearer` stays for Swagger/scripts. Registration is required because AttackChains are attached to users by ID. Logout via **/auth/logout**. Set `SECURITY__COOKIE_SECURE=true` behind TLS.
 > Note that the login field is the email you used during registration.
+
+The /mcp mount requires a static key: `MCP__API_KEY=...` in `.env`; in pi mcp.json pass it as `{"url": "http://<kali>:8000/mcp", "headers": {"Authorization": "Bearer ${EAGLE_MCP_API_KEY}"}}`.
+
+### Direct bash on host
+
+`LOCAL_BASH__ENABLED=1` in `.env` enables POST /cmd/run-bash and the MCP tool run_bash_command: a command runs directly on the host where EAGLE runs (put EAGLE on the Kali VM) and one call returns `output / exit_code / truncated / full_log_path`. Each run is stored as one AttackStep + one BashTask row, status and output are mirrored to redis `eagle:bash:*`, so chains keep replaying. Safety: regex deny-list from `LOCAL_BASH__REJECT` (default blocks `rm -rf /`-class, mkfs, `dd of=/dev/`, fork bombs, shutdown, interactive clients like ssh/telnet/ftp/evil-winrm, psql/mysql without -c/-e, impacket-psexec/wmiexec/smbexec/dcomexec, hang forms of nc/socat with -l or LISTEN) + timeout `LOCAL_BASH__TIMEOUT` (default 300s, max 3600) + process-group kill. Full uncut logs land in backend/data/bash/ (gitignored). LLM analysis stays manual via **/cmd/step/{id}/analyze**.
+
 
 Once authenticated, you can create a new attack chain with **/cmd/new-chain/**.
 A new chain with your specified name will be assigned an ID, which is used to attach steps to that chain.
