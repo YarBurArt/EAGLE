@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import api_messages
+from app.api import api_messages, deps
 from app.api.endpoints import auth, kill_chain, llm, tasks, users
 
 auth_router = APIRouter()
@@ -41,7 +41,12 @@ api_router = APIRouter(
 )
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(tasks.router, prefix="/cmd", tags=["tasks"])
-api_router.include_router(llm.router, prefix="/llm", tags=["llm"])
+api_router.include_router(
+    llm.router,
+    prefix="/llm",
+    tags=["llm"],
+    dependencies=[Depends(deps.get_current_user)],
+)
 api_router.include_router(
     kill_chain.router, prefix="/export-chain", tags=["kill-chain"]
 )

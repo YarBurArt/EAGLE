@@ -4,6 +4,7 @@ like all authenticated endpoints need user session & id
 """
 
 import asyncio
+import logging
 from collections.abc import AsyncGenerator
 from typing import Annotated
 
@@ -17,7 +18,13 @@ from app.core import database_session
 from app.core.security.jwt import verify_jwt_token
 from app.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/access-token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/access-token", auto_error=False)
+
+# cookies hold the same JWT as the header
+ACCESS_COOKIE = "eagle_at"
+REFRESH_COOKIE = "eagle_rt"
+# route-scoped, never rides an ordinary api call
+REFRESH_COOKIE_PATH = "/api/auth/refresh-token"
 
 
 class ChainController:
@@ -27,6 +34,14 @@ class ChainController:
     def cancel_chain(self, chain_id: int):
         if chain_id in self.active_chains:
             self.active_chains[chain_id].set()
+        # direct bash steps of this chain are running right now, kill them
+        from app.cmd.local_bash import kill_chain  # noqa: PLC0415
+
+        killed = kill_chain(chain_id)
+        if killed:
+            logging.getLogger(__name__).info(
+                "chain %s cancel: killed %s bash process(es)", chain_id, killed
+            )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
@@ -36,10 +51,17 @@ async def get_session() -> AsyncGenerator[AsyncSession]:
 
 
 async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> User:
-    """get user from DB by jwt token"""
+    """cookie first, header second, header stays for Swagger/scripts"""
+    token = token or request.cookies.get(ACCESS_COOKIE)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=api_messages.JWT_ERROR_USER_REMOVED,
+        )
     token_payload = verify_jwt_token(token)
 
     query = select(User).where(User.user_id == token_payload.sub)

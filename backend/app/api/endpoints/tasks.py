@@ -25,12 +25,14 @@ from app.schemas.requests import (
     ActionApprovalRequest,
     ActionExecutionRequest,
     AgentCommandRequest,
+    BashCommandRequest,
     LocalCommandRequest,
     NewAgentRequest,
     NewChainRequest,
 )
 from app.schemas.responses import (
     AttackStepResponse,
+    BashCommandResponse,
     ChainOverviewResponse,
     ChainWithStepsResponse,
     GetChainPhaseResponse,
@@ -40,12 +42,14 @@ from app.schemas.responses import (
     NewPayloadResponse,
     NewPhaseResponse,
 )
+from app.services.bash_service import BashCommandService
 from app.services.c2_service import CommandsC2ExecService
 from app.services.chain_exec_service import ChainExecutionService
 from app.services.chain_service import ChainService
 from app.services.payload_service import AgentPayloadService
 from app.services.s_deps import (
     get_agent_payload_service,
+    get_bash_service,
     get_chain_execution_service,
     get_chain_service,
     get_command_service,
@@ -126,6 +130,27 @@ async def run_local_command(
 
 
 @router.post(
+    "/run-bash",
+    description="Run bash command directly on EAGLE host (no C2), "
+    "ticket now, output & status live in redis events of bash_task",
+    response_model=BashCommandResponse,
+)
+async def run_bash_command(
+    data: BashCommandRequest,
+    current_user: User = Depends(deps.get_current_user),
+    chain_service: ChainService = Depends(get_chain_service),
+    bash_service: BashCommandService = Depends(get_bash_service),
+) -> BashCommandResponse:
+    chain_name, _chain_id, _phase = await chain_service.get_chain_n_phase(
+        data.chain_name, current_user
+    )
+    result = await bash_service.start(
+        data.command, chain_name, current_user, data.timeout
+    )
+    return BashCommandResponse(step_type="bash", **result)
+
+
+@router.post(
     "/run-agent-command",
     description="Run agent command on remote agent like libinject",
     response_model=LocalCommandResponse,
@@ -198,8 +223,10 @@ async def update_agent(
 )
 async def read_agent_status(
     display_id: int,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     command_service: CommandsC2ExecService = Depends(get_command_service),
 ) -> str:
+    """current_user is only the auth gate"""
     return await command_service.get_agent_status(display_id)
 
 
@@ -209,8 +236,10 @@ async def read_agent_status(
 )
 async def read_step_snapshot(
     step_id: int,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     command_service: CommandsC2ExecService = Depends(get_command_service),
 ) -> dict[str, Any]:
+    """current_user is only the auth gate"""
     return await command_service.get_step_with_tasks(step_id)
 
 
@@ -221,9 +250,11 @@ async def read_step_snapshot(
 )
 async def step_events(  # noqa: PLR0913, PLR0917
     step_id: int,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     command_service: CommandsC2ExecService = Depends(get_command_service),
     events_service: MythicEventsService = Depends(get_events_service),
 ) -> StreamingResponse:
+    """current_user is only the auth gate"""
     snapshot = await command_service.get_step_with_tasks(step_id)
     # stream protocol (terminal/grace/idle) lives in the events service
     return StreamingResponse(
@@ -316,6 +347,7 @@ async def edit_step(
         "id": step.id,
         "chain_id": step.chain_id,
         "phase": step.phase,
+        "step_type": step.step_type,
         "tool_name": step.tool_name,
         "command": step.command,
         "status": step.status,
@@ -330,8 +362,10 @@ async def edit_step(
 )
 async def next_phase(
     chain_id: int,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     chain_service: ChainService = Depends(get_chain_service),
 ) -> NewPhaseResponse:
+    """current_user is only the auth gate, ownership checked in service layer"""
     c_id, phase = await chain_service.next_phase(chain_id)
     return NewPhaseResponse(chain_id=c_id, current_phase_name=phase)
 
@@ -344,8 +378,10 @@ async def next_phase(
 async def set_phase(
     chain_id: int,
     phase_name: str,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     chain_service: ChainService = Depends(get_chain_service),
 ) -> NewPhaseResponse:
+    """current_user is only the auth gate, ownership checked in service layer"""
     c_id, phase = await chain_service.set_phase(chain_id, phase_name)
     return NewPhaseResponse(chain_id=c_id, current_phase_name=phase)
 
@@ -394,9 +430,11 @@ async def run_chain(  # noqa: PLR0913, PLR0917
 async def cancel_chain_ws(
     websocket: WebSocket,
     chain_id: int,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     chain_service: ChainService = Depends(get_chain_service),
     chain_controller: ChainController = Depends(get_chain_controller),
 ) -> None:
+    """current_user is only the auth gate, cookies ride the ws upgrade"""
     await websocket.accept()
     try:
         chain_name = await websocket.receive_text()
@@ -411,9 +449,11 @@ async def cancel_chain_ws(
 async def cancel_chain_a_http(
     chain_id: int,
     chain_name: str,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     chain_service: ChainService = Depends(get_chain_service),
     chain_controller: ChainController = Depends(get_chain_controller),
 ) -> JSONResponse:
+    """current_user is only the auth gate, chain name itself is the secret"""
     verified = await chain_service.verify_chain_name(chain_id, chain_name)
     if verified:
         chain_controller.cancel_chain(chain_id)
@@ -423,8 +463,10 @@ async def cancel_chain_a_http(
 @router.post("/approve-action")
 async def approve_action_from_llm(
     action_request: ActionApprovalRequest,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     command_service: CommandsC2ExecService = Depends(get_command_service),
 ) -> dict[str, Any]:
+    """current_user is only the auth gate, actions execute on real agents"""
     try:
         result = await command_service.approve_action(
             command=action_request.command,
@@ -452,8 +494,10 @@ async def approve_action_from_llm(
 @router.post("/api/llm/action/execute")
 async def execute_approved_action(
     action_request: ActionExecutionRequest,
+    current_user: User = Depends(deps.get_current_user),  # noqa: ARG001
     command_service: CommandsC2ExecService = Depends(get_command_service),
 ) -> dict[str, Any]:
+    """current_user is only the auth gate, actions execute on real agents"""
     try:
         if not action_request.command:
             raise HTTPException(status_code=400, detail="Command is required")

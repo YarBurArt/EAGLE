@@ -5,6 +5,7 @@ security middleware layers, and Swagger parameters
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from secrets import compare_digest
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,15 +14,21 @@ from fastapi.responses import JSONResponse
 # from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+from sqlalchemy import select
+from starlette.datastructures import Headers
 
 from app.api.api_router import api_router, auth_router, frontend_router
 from app.api.deps import ChainController
 from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
+from app.cmd.local_bash import kill_all
 from app.cmd.mythic_events import MythicEventsService
+from app.core import database_session
 from app.core.config import DEBUG_MODE_C, get_settings
+from app.core.security.password import get_password_hash
 from app.mitre_loader import build_apt_chain_index, load_attack_graph
+from app.models import User
 from app.services.ttp_info_service import TTPInfoService
 
 # mount only the raw ASGI handler for mcp
@@ -50,6 +57,25 @@ async def lifespan(app: FastAPI):
     app.state.chain_controller = ChainController()
     tasks_mcp._events_service = events_service
 
+    # bootstrap admin until roles exist
+    cfg = get_settings().security
+    if cfg.admin_email and cfg.admin_password:
+        async with database_session.get_async_session() as admin_session:
+            exists = await admin_session.scalar(
+                select(User).where(User.email == cfg.admin_email)
+            )
+            if exists is None:
+                admin_session.add(
+                    User(
+                        email=cfg.admin_email,
+                        username=cfg.admin_email.split("@", 1)[0],
+                        role="admin",
+                        hashed_password=get_password_hash(cfg.admin_password),
+                    )
+                )
+                await admin_session.commit()
+                print("\033[1mBootstrap admin \033[0m created from .env")
+
     # load MITRE ATT&CK data for TTP queries in MCP
     settings = get_settings()
     try:
@@ -74,6 +100,8 @@ async def lifespan(app: FastAPI):
     async with _mcp_session_manager.run():
         yield
 
+    # no orphan nmap on the Kali box, close bash children first
+    kill_all()
     await events_service.stop()
     await mythic_client.disconnect()
 
@@ -89,19 +117,58 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def _api_key_guard(app_asgi):
+    """fail-closed when MCP__API_KEY is unset"""
+
+    async def guarded(scope, receive, send):
+        if scope["type"] != "http":
+            await app_asgi(scope, receive, send)
+            return
+        api_key = get_settings().mcp.api_key
+        headers = Headers(scope=scope)
+        provided = headers.get("x-api-key")
+        if not provided:
+            auth = headers.get("authorization")
+            if auth and auth.lower().startswith("bearer "):
+                provided = auth[7:].strip()
+        if not api_key or not provided or not compare_digest(api_key, provided):
+            body = b'{"detail": "invalid or missing MCP API key"}'
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                        (b"www-authenticate", b"Bearer"),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": body})
+            return
+        await app_asgi(scope, receive, send)
+
+    return guarded
+
+
+_api_key = get_settings().mcp.api_key
+app.mount("/mcp", _api_key_guard(_mcp_session_manager.asgi_app))
+if not _api_key:
+    print(
+        "\033[1;33mWARNING:   \033[0mMCP__API_KEY is not set, /mcp mount will"
+        " answer 401 until you add one to .env"
+    )
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(api_router, prefix="/api")
 
-app.mount("/mcp", _mcp_session_manager.asgi_app)
-
 app.include_router(frontend_router)
-# Sets all CORS enabled origins
+# cookies need an exact origin, not a wildcard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "127.0.0.1"  # DEBUG, CHANGE ME BEFORE RUN
-        #    str(origin).rstrip("/")
-        #    for origin in get_settings().security.backend_cors_origins
+        str(o).rstrip("/") for o in get_settings().security.backend_cors_origins
     ],
     allow_credentials=True,
     allow_methods=["*"],
