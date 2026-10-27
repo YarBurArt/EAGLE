@@ -18,7 +18,7 @@ from sqlalchemy import select
 from app.cmd.llm_analysis import llm_service
 from app.core.config import get_settings
 from app.core.database_session import get_async_session
-from app.models import AttackStep, MythicTask
+from app.models import AttackStep, BashTask, MythicTask
 
 if TYPE_CHECKING:
     from app.cmd.c2_tool import MythicClient
@@ -119,6 +119,11 @@ class MythicEventsService:
         return f"eagle:task:{mythic_task_id}"
 
     @staticmethod
+    def bash_task_key(bash_task_id: int) -> str:
+        """same stream/hash contract as mythic tasks, own namespace"""
+        return f"eagle:bash:{bash_task_id}"
+
+    @staticmethod
     def payload_key(payload_uuid: str) -> str:
         return f"eagle:payload:{payload_uuid}"
 
@@ -165,6 +170,18 @@ class MythicEventsService:
             return
         for task_id in task_ids:
             await self._emit_task(task_id, "submitted", completed=False)
+        try:
+            async with get_async_session() as session:
+                bash_rows = await session.execute(
+                    select(BashTask).where(
+                        BashTask.status.in_(("submitted", "running"))
+                    )
+                )
+                for row in bash_rows.scalars():
+                    await self.emit_bash_status(row.id, row.status)
+        except Exception as e:
+            logger.warning("bash stale recovery skipped: %s", e)
+            return
         logger.info("recovered %s stale tickets into redis", len(task_ids))
 
     async def _on_task_event(self, task: dict) -> None:
@@ -358,13 +375,54 @@ class MythicEventsService:
             rows = await session.execute(
                 select(MythicTask).where(MythicTask.step_id == step_id)
             )
-            return [f"{self.task_key(r.mythic_task_id)}:events" for r in rows.scalars()]
+            keys = [f"{self.task_key(r.mythic_task_id)}:events" for r in rows.scalars()]
+            bash_rows = await session.execute(
+                select(BashTask).where(BashTask.step_id == step_id)
+            )
+            keys += [f"{self.bash_task_key(r.id)}:events" for r in bash_rows.scalars()]
+            return keys
+
+    def spawn_bash_worker(self, coro) -> None:
+        """fire-and-forget bash worker ref, same watcher set as mythic loops"""
+        self._spawn(coro)
+
+    async def emit_bash_status(
+        self, bash_task_id: int, status: str, completed: bool = False
+    ) -> None:
+        """bash version of task status rows, same event shape as mythic"""
+        await self._write_state(
+            f"{self.bash_task_key(bash_task_id)}:events",
+            status,
+            _snap("status", task_id=bash_task_id, status=status, completed=completed),
+        )
+
+    async def emit_bash_output(
+        self, bash_task_id: int, output: str, status: str, step_id: int
+    ) -> None:
+        """single output row when the run finishes, hiders use step_id in event"""
+        await self._redis.xadd(
+            f"{self.bash_task_key(bash_task_id)}:events",
+            _encode(
+                _snap(
+                    "output",
+                    task_id=bash_task_id,
+                    raw_log=output,
+                    status=status,
+                    step_id=step_id,
+                )
+            ),
+        )
 
     async def follow_task(self, mythic_task_id: int) -> AsyncGenerator[str]:
         """iterate task events from redis, from the current moment"""
+        async for raw in self._follow(self.task_key(mythic_task_id) + ":events"):
+            yield raw
+
+    async def _follow(self, stream_key: str) -> AsyncGenerator[str]:
+        """iterate one stream from the current moment, shared by both namespaces"""
         if not self.available:
             return
-        key = f"{self.task_key(mythic_task_id)}:events"
+        key = stream_key
         last_id = "$"
         while True:
             resp = await self._redis.xread({key: last_id}, count=10, block=10_000)
@@ -381,11 +439,30 @@ class MythicEventsService:
         """bounded wait like old blocking way, returns final status or timeout"""
 
         async def _inner() -> str:
-            async for raw in self.follow_task(mythic_task_id):
+            async for raw in self._follow(self.task_key(mythic_task_id) + ":events"):
                 event = json.loads(raw)
                 if event.get("completed") or event.get("status") in TERMINAL:
                     return event.get("status", "completed")
             return "fail"
+
+        try:
+            return await asyncio.wait_for(_inner(), timeout)
+        except TimeoutError:
+            return "timeout"
+
+    async def wait_for_bash(self, bash_task_id: int, timeout: int = 300) -> str:
+        """same bounded wait for direct bash tasks in the bash namespace"""
+        status = "submitted"
+
+        async def _inner() -> str:
+            nonlocal status
+            async for raw in self._follow(self.bash_task_key(bash_task_id) + ":events"):
+                event = json.loads(raw)
+                if event.get("event") == "status":
+                    status = str(event.get("status") or status)
+                if event.get("completed") or event.get("status") in TERMINAL:
+                    return event.get("status", "completed")
+            return status
 
         try:
             return await asyncio.wait_for(_inner(), timeout)
@@ -429,11 +506,14 @@ class MythicEventsService:
             return out, status
 
     async def get_task_status(self, mythic_task_id: int) -> dict | None:
-        """current status from redis hot state, or None"""
+        """current status from redis hot state, mythic first then bash, or None"""
         if not self.available:
             return None
         hash_map = await self._redis.hgetall(self.task_key(mythic_task_id))
-        return hash_map if hash_map else None
+        if hash_map:
+            return hash_map
+        bash_map = await self._redis.hgetall(self.bash_task_key(mythic_task_id))
+        return bash_map if bash_map else None
 
     async def step_stream_keys(self, step_id: int) -> list[str]:
         """event stream keys of step: all task streams + payload stream"""
