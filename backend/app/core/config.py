@@ -45,6 +45,12 @@ class Security(BaseModel):
     password_bcrypt_rounds: int = 12
     allowed_hosts: list[str] = ["localhost", "127.0.0.1"]
     backend_cors_origins: list[AnyHttpUrl] = []
+    # registration is off, bootstrap admin below until role system exists
+    registration_enabled: bool = False
+    admin_email: str = ""
+    admin_password: str = ""
+    # Secure cookie flag, set True behind TLS/https, False on plain http Kali
+    cookie_secure: bool = False
 
 
 class Database(BaseModel):
@@ -91,6 +97,42 @@ class Mitre(BaseModel):
     threat_groups_path: Path = PROJECT_DIR / "data" / "threat-groups.json"
 
 
+class MCP(BaseModel):
+    """env format like MCP__API_KEY=..., Unauthorized agents are not needed here"""
+
+    api_key: str = ""
+
+
+class LocalBash(BaseModel):
+    """env format like LOCAL_BASH__ENABLED=1, direct bash on EAGLE host (Kali),
+    no C2 in the loop, safety comes from the deny list below and the flag"""
+
+    enabled: bool = False
+    shell: Path = Path("/bin/bash")
+    timeout: int = 300
+    max_timeout: int = 3600
+    # cut output to db/llm, full log always on disk in workspace_dir
+    max_output_chars: int = 200_000
+    workspace_dir: Path = PROJECT_DIR / "data" / "bash"
+    # pi limits: the zero agent survived with these
+    max_concurrent: int = 4
+    # deny only destroy-the-box and stdin-hangers, the agent stays useful
+    reject: list[str] = [
+        r"rm\s+-rf\s+/\*?",  # rm -rf / and /*
+        r"rm\s+[^;&\n]*\s+/(?![\w./-])",  # rm (something) / -> nuked the root
+        r"\bmkfs(\.\w+)?\b",  # format the machine
+        r"\bdd\s+[^;&\n]*of=/dev/",  # raw write to a block device
+        r":\s*\(\s*\)\s*\{",  # fork bomb :(){ :|:& };:
+        r"\b(?:shutdown|reboot|poweroff|halt)(?:\.\w+)?\b",
+        r"\b(?:ssh|telnet|ftp|evil-winrm)\b",  # interactive shells hang on stdin
+        r"\bpsql\b(?![^;&\n]*-c\b)",  # psql without -c waits for input
+        r"\bmysql\b(?![^;&\n]*-e\b)",
+        r"\b(?:impacket-)?(?:psexec|wmiexec|smbexec|dcomexec)(?:\.py)?\b",  # drops into interactive shell without a command
+        r"\b(?:nc|ncat)\b[^;&\n]*\s-{1,2}l\w*\b",  # listener form hangs, one-shot nc is fine
+        r"\bsocat\b[^;&\n]*LISTEN",  # same, socat listening waits forever
+    ]
+
+
 class Settings(BaseSettings):
     """only to validate settings by pydantic"""
 
@@ -100,6 +142,8 @@ class Settings(BaseSettings):
     redis: Redis = Field(default_factory=Redis)
     llmservice: LLMservice = Field(default_factory=LLMservice)
     mitre: Mitre = Field(default_factory=Mitre)
+    mcp: MCP = Field(default_factory=MCP)
+    local_bash: LocalBash = Field(default_factory=LocalBash)
 
     @computed_field  # type: ignore[prop-decorator]
     @property
