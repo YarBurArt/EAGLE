@@ -49,6 +49,7 @@ class LocalCommandResponse(BaseResponse):
     callback_display_id: int
     step_id: int | None
     mythic_task_id: int
+    step_type: str = "local"
     tool_name: str
     command: str
     status: str
@@ -56,10 +57,20 @@ class LocalCommandResponse(BaseResponse):
     llm_analysis: str
 
 
+class BashCommandResponse(BaseResponse):
+    chain_name: str
+    step_id: int
+    bash_task_id: int
+    step_type: str
+    command: str
+    status: str
+
+
 class AttackStepResponse(BaseResponse):
     id: int | None
     chain_id: int | None
     phase: str
+    step_type: str = "local"
     tool_name: str
     command: str
     callback_display_id: int

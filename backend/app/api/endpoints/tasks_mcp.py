@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from fastapi import HTTPException
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy import select
 
@@ -22,6 +23,7 @@ from app.core import database_session
 from app.core.security.jwt import create_jwt_token, verify_jwt_token
 from app.core.security.password import verify_password
 from app.models import User
+from app.services.bash_service import BashCommandService
 from app.services.c2_service import CommandsC2ExecService
 from app.services.chain_exec_service import ChainExecutionService
 from app.services.chain_service import ChainService
@@ -125,6 +127,33 @@ async def create_attack_chain(chain_name: str) -> dict[str, Any]:
         svc = ChainService(session)
         chain_id, name, phase = await svc.create_chain(chain_name, ctx.user)
     return {"chain_id": chain_id, "chain_name": name, "current_phase_name": phase}
+
+
+@mcp.tool()
+async def run_bash_command(
+    chain_name: str,
+    command: str,
+    timeout: int = 300,
+) -> dict[str, Any]:
+    """Execute a bash command directly on the Kali host where EAGLE runs, no C2 in the
+    loop (fast, unlike zero agent). Denied only by reject patterns (kill-the-box and
+    stdin hangers), cannot replace commands on remote Mythic agents (use
+    run_agent_command for those). Waits and returns output, exit_code, status,
+    full_log_path — one-shot like a local bash tool."""
+    events = _events_service()
+    if events is None or not events.available:
+        return {"error": "events service not available, cannot run bash safely"}
+    ctx = await _get_ctx()
+    try:
+        async with database_session.get_async_session() as session:
+            bash_svc = BashCommandService(session, events)
+            result = await bash_svc.start(command, chain_name, ctx.user, timeout)
+        bash_task_id = result["bash_task_id"]
+        async with database_session.get_async_session() as session:
+            bash_svc = BashCommandService(session, events)
+            return await bash_svc.wait_result(bash_task_id, max(1, int(timeout)))
+    except HTTPException as e:
+        return {"error": str(e.detail)}
 
 
 @mcp.tool()
