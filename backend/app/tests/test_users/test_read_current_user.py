@@ -37,4 +37,6 @@ async def test_read_current_user_response(
     assert response.json() == {
         "user_id": default_user_id,
         "email": default_user_email,
+        "role": None,
+        "username": None,
     }

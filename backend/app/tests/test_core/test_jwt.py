@@ -54,8 +54,7 @@ def test_jwt_error_before_iat_time() -> None:
         with pytest.raises(HTTPException) as e:
             jwt.verify_jwt_token(token=token.access_token)
 
-        assert e.value.detail == "Token invalid: "
-        "The token is not yet valid (iat)"
+        assert e.value.detail == "Token invalid: The token is not yet valid (iat)"
 
 
 def test_jwt_error_with_invalid_token() -> None:

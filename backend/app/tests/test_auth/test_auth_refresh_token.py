@@ -9,7 +9,7 @@ import pytest
 from fastapi import status
 from freezegun import freeze_time
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import api_messages
@@ -85,8 +85,49 @@ async def test_refresh_token_fails_with_message_when_token_is_used(
         },
     )
 
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    # reuse of a rotated token = stolen cookie behavior
+    # -> 401 and the whole family of that user is revoked
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
     assert response.json() == {"detail": api_messages.REFRESH_TOKEN_ALREADY_USED}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_refresh_token_reuse_revokes_all_tokens_of_the_user(
+    client: AsyncClient,
+    default_user: User,
+    session: AsyncSession,
+) -> None:
+    used_token = RefreshToken(
+        user_id=default_user.user_id,
+        refresh_token="blaxx",
+        exp=int(time.time()) + 1000,
+        used=True,
+    )
+    session.add(used_token)
+    session.add(
+        RefreshToken(
+            user_id=default_user.user_id,
+            refresh_token="alive1",
+            exp=int(time.time()) + 1000,
+            used=False,
+        )
+    )
+    await session.commit()
+
+    response = await client.post(
+        app.url_path_for("refresh_token"),
+        json={
+            "refresh_token": "blaxx",
+        },
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    count = await session.scalar(
+        select(func.count())
+        .select_from(RefreshToken)
+        .where(RefreshToken.user_id == default_user.user_id)
+    )
+    assert count == 0
 
 
 @pytest.mark.asyncio(loop_scope="session")
