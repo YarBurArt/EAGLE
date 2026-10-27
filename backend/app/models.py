@@ -99,6 +99,11 @@ class AttackStep(Base):
     )
     # each step has a specific phase, which can differs from the current
     phase: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
+    # real router: local | agent | custom | payload | getcallback | bash,
+    # tool_name below is just a label like nmap, shell, impacket-wmiexec
+    step_type: Mapped[str] = mapped_column(
+        String(64), nullable=False, server_default="local"
+    )
     tool_name: Mapped[str] = mapped_column(String(64), nullable=False, unique=False)
     command: Mapped[str] = mapped_column(Text, nullable=False, unique=False)
     mythic_task_id: Mapped[int] = mapped_column(Integer, nullable=False, unique=False)
@@ -121,6 +126,7 @@ class AttackStep(Base):
     attack_chain: Mapped[AttackChain] = relationship(back_populates="attack_step")
     agent: Mapped[list[Agent]] = relationship(back_populates="attack_step")
     mythic_tasks: Mapped[list[MythicTask]] = relationship(back_populates="attack_step")
+    bash_tasks: Mapped[list[BashTask]] = relationship(back_populates="attack_step")
 
 
 class MythicTask(Base):
@@ -147,6 +153,32 @@ class MythicTask(Base):
     )
 
     attack_step: Mapped[AttackStep] = relationship(back_populates="mythic_tasks")
+
+
+class BashTask(Base):
+    __tablename__ = "bash_task"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    step_id: Mapped[int] = mapped_column(
+        ForeignKey("attack_step.id", ondelete="CASCADE"),
+    )
+    # submitted -> running -> completed | failed, one per run
+    status: Mapped[str] = mapped_column(String(32), nullable=False, unique=False)
+    # cut output like raw_log, full log only on disk
+    output: Mapped[str] = mapped_column(Text, nullable=True, unique=False)
+    # negative/None when killed by timeout or cancel
+    exit_code: Mapped[int] = mapped_column(Integer, nullable=True, unique=False)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=True, unique=False)
+    # bash_{step_id}_{task_id}.log in workspace, full uncut output
+    full_log_path: Mapped[str] = mapped_column(String(512), nullable=True, unique=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    completed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True, unique=False
+    )
+
+    attack_step: Mapped[AttackStep] = relationship(back_populates="bash_tasks")
 
 
 class CurrentAttackPhase(Base):
