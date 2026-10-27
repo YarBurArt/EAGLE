@@ -42,6 +42,14 @@ class LocalCommandRequest(BaseRequest):
     is_analyze_llm: bool = False
 
 
+class BashCommandRequest(BaseRequest):
+    """direct bash on EAGLE host, no C2, ticket + redis events"""
+
+    chain_name: str
+    command: str
+    timeout: int = 300
+
+
 class AgentCommandRequest(BaseRequest):
     chain_name: str
     callback_display_id: int

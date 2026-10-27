@@ -242,7 +242,7 @@ class ChainService:
         if chain is None or chain.user_id != current_user.user_id:
             raise HTTPException(status_code=404, detail="Chain not found")
 
-        allowed_fields = {"tool_name", "command", "raw_log", "status"}
+        allowed_fields = {"tool_name", "step_type", "command", "raw_log", "status"}
         for field, value in patch.items():
             if field in allowed_fields:
                 setattr(step, field, value)

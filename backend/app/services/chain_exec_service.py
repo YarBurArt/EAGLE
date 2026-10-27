@@ -45,7 +45,11 @@ class ChainExecutionService:
                     display_id = zero_display_id
                     p_os_type = "Windows"
                 ctx = ChainContext(chain_id=step.chain_id, phase_name=step.phase)
-                cb = CallbackInfo(display_id=display_id, tool_name=step.tool_name)
+                cb = CallbackInfo(
+                    display_id=display_id,
+                    step_type=step.step_type,
+                    tool_name=step.tool_name,
+                )
                 result, llm_a, agent_c, mythic_task = await process_approved_cmd(
                     cmd=step.command,
                     ctx=ctx,

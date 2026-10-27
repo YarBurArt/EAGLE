@@ -77,7 +77,7 @@ class AgentPayloadService:
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
         res = await process_new_callback(
             ctx,
-            "getcallback_get_agent_callback_after",
+            "get_agent_callback_after",
             rhost,
             last_step.id,
             mythic_client=self.mythic_client,

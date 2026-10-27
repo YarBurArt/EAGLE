@@ -18,7 +18,7 @@ from app.cmd.proc import (
     get_agent_status,
     process_approved_cmd,
 )
-from app.models import AttackChain, AttackStep, MythicTask, User
+from app.models import AttackChain, AttackStep, BashTask, MythicTask, User
 
 
 class CommandsC2ExecService:
@@ -79,7 +79,7 @@ class CommandsC2ExecService:
         """execute agent command, returns ticket now,
         raw_output & llm_analysis updates by events service via stream"""
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
-        cb = CallbackInfo(display_id=display_id, tool_name="agent_" + tool)
+        cb = CallbackInfo(display_id=display_id, step_type="agent", tool_name=tool)
         step, _, c_agent, mythic_task = await check_and_process_agent_cmd(
             cb, ctx, command_params, self.mythic_client, is_analyze_llm
         )
@@ -120,7 +120,8 @@ class CommandsC2ExecService:
         ctx = ChainContext(chain_id=chain_id, phase_name=phase)
         cb = CallbackInfo(
             display_id=agent_id,
-            tool_name=f"{type_cmd}_{type_tool}",
+            step_type=type_cmd,
+            tool_name=type_tool,
         )
         result = await process_approved_cmd(
             cmd=command,
@@ -196,10 +197,14 @@ class CommandsC2ExecService:
         rows = await self.session.execute(
             select(MythicTask).where(MythicTask.step_id == step_id)
         )
+        bash_rows = await self.session.execute(
+            select(BashTask).where(BashTask.step_id == step_id)
+        )
         return {
             "step_id": step.id,
             "chain_id": step.chain_id,
             "phase": step.phase,
+            "step_type": step.step_type,
             "tool_name": step.tool_name,
             "command": step.command,
             "status": step.status,
@@ -217,6 +222,17 @@ class CommandsC2ExecService:
                     "auto_analyze": t.auto_analyze,
                 }
                 for t in rows.scalars()
+            ],
+            "bash_tasks": [
+                {
+                    "bash_task_id": t.id,
+                    "status": t.status,
+                    "output": t.output,
+                    "exit_code": t.exit_code,
+                    "duration_ms": t.duration_ms,
+                    "full_log_path": t.full_log_path,
+                }
+                for t in bash_rows.scalars()
             ],
         }
 
