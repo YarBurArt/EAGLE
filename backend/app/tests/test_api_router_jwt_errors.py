@@ -13,7 +13,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import api_messages
-from app.api.deps import ChainController
+from app.api.deps import AgentRunController, ChainController
 from app.cmd.c2_tool import MythicClient
 from app.cmd.mythic_events import MythicEventsService
 from app.core.security.jwt import create_jwt_token
@@ -71,6 +71,7 @@ async def fixture_app_state_stubs():
     state.mythic_client = MythicClient()
     state.events_service = MythicEventsService()
     state.chain_controller = ChainController()
+    state.agent_run_controller = AgentRunController()
     try:
         yield
     finally:

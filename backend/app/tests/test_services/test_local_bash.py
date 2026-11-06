@@ -84,7 +84,8 @@ async def test_run_bash_reject_list_allows_common_tooling(bash_on) -> None:
 
 @pytest.mark.asyncio
 async def test_run_bash_disabled_by_default(monkeypatch) -> None:
-    monkeypatch.delenv("LOCAL_BASH__ENABLED", raising=False)
+    # a local .env may enable bash; force the disabled state for this check
+    monkeypatch.setenv("LOCAL_BASH__ENABLED", "0")
     get_settings.cache_clear()
 
     with pytest.raises(BashDisabled):
