@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
 import { chainApi } from '../entities/chainApi'
-import { toast } from 'react-toastify'
 
 // to cache chain choice
 const LAST_CHAIN_KEY = 'eagle_last_chain_id'
@@ -27,8 +26,11 @@ export const useChainSwitch = () => {
             const full = await chainApi.getChainInfo(match.chain_id)
             setCurrentChain((prev) => prev ?? full)
           } catch {
-            toast.error('Chain info load failed, stale cache of current id / chain list?')
+            // the cached chain is gone; fall back to the picker silently
+            localStorage.removeItem(LAST_CHAIN_KEY)
           }
+        } else {
+          localStorage.removeItem(LAST_CHAIN_KEY)
         }
       }
     } catch (err) {

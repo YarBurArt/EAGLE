@@ -1,21 +1,31 @@
 import { api } from '../shared/api/axios'
 
 const BASE = '/cmd'
+// raw fetch bypasses the axios baseURL, so the api prefix must be explicit
+const FETCH_BASE = '/api/cmd'
 
 export const stepApi = {
-  runLocalCommand: ({ chain_name, callback_display_id, command, is_analyze_llm }) =>
+  runLocalCommand: ({ chain_name, callback_display_id, command, is_analyze_llm, step_id }) =>
     api.post(`${BASE}/run-command`, {
       chain_name,
       callback_display_id,
       command,
       is_analyze_llm,
+      step_id: step_id ?? null,
     }),
 
-  runBash: ({ chain_name, command, timeout }) =>
+  runBash: ({ chain_name, command, timeout, step_id }) =>
     // direct bash on host
-    api.post(`${BASE}/run-bash`, { chain_name, command, timeout }),
+    api.post(`${BASE}/run-bash`, { chain_name, command, timeout, step_id: step_id ?? null }),
 
-  runAgentCommand: ({ chain_name, callback_display_id, command_params, tool, is_analyze_llm }) =>
+  runAgentCommand: ({
+    chain_name,
+    callback_display_id,
+    command_params,
+    tool,
+    is_analyze_llm,
+    step_id,
+  }) =>
     api.post(`${BASE}/run-agent-command`, {
       chain_name,
       callback_display_id,
@@ -23,6 +33,7 @@ export const stepApi = {
       // TODO: fix the workaround in proc.py -> process_approved_cmd -> tool_name like local_impacket-wmiexec
       tool: tool ?? 'shell',
       is_analyze_llm,
+      step_id: step_id ?? null,
     }),
 
   getStep: (stepId) => api.get(`${BASE}/step/${stepId}`).then((res) => res.data),
@@ -31,19 +42,24 @@ export const stepApi = {
 
   // live ndjson events of step & tasks, cookies ride along
   streamStepEvents: (stepId, onEvent, signal) =>
-    fetch(`${BASE}/step/${stepId}/events`, {
+    fetch(`${FETCH_BASE}/step/${stepId}/events`, {
       signal,
+      credentials: 'include',
     }).then(async (resp) => {
       if (!resp.ok || !resp.body) throw new Error(`step events status ${resp.status}`)
+
       const reader = resp.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
+
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
+
         buf += decoder.decode(value, { stream: true })
         const lines = buf.split('\n')
         buf = lines.pop()
+
         lines.forEach((line) => {
           if (!line.trim()) return
           try {
@@ -53,6 +69,7 @@ export const stepApi = {
           }
         })
       }
+
       if (buf.trim()) {
         try {
           onEvent(JSON.parse(buf))
@@ -60,6 +77,7 @@ export const stepApi = {
           // leftover without newline
         }
       }
+
       return resp
     }),
 

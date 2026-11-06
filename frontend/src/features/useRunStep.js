@@ -57,6 +57,7 @@ export const useRunStep = () => {
           command_params: step.command_params,
           tool: step.tool,
           is_analyze_llm: false,
+          step_id: step.id ?? null,
         })
         data = res.data
       } else if (step.step_type === STEP_TYPES.BASH) {
@@ -65,6 +66,7 @@ export const useRunStep = () => {
           chain_name: step.chain_name,
           command: step.command,
           timeout: 3600,
+          step_id: step.id ?? null,
         })
         data = res.data
       } else {
@@ -73,6 +75,7 @@ export const useRunStep = () => {
           callback_display_id: step.callback_display_id,
           command: step.command,
           is_analyze_llm: false,
+          step_id: step.id ?? null,
         })
         data = res.data
       }
@@ -91,6 +94,20 @@ export const useRunStep = () => {
 
       const controller = new AbortController()
       let resolved = false
+      let closing = false
+
+      // terminal status arrives before the output row; stay open briefly so
+      // the output is not wiped, then give up if nothing else comes
+      const closeSoon = () => {
+        if (closing) return
+        closing = true
+        setTimeout(() => {
+          if (resolved) return
+          resolved = true
+          controller.abort()
+        }, 800)
+      }
+
       await stepApi
         .streamStepEvents(
           data.step_id,
@@ -100,7 +117,7 @@ export const useRunStep = () => {
             if (kind === 'snapshot') {
               // fast commands can finish before the stream attaches
               const snap = event.step
-              if (!resolved && snap && ['success', 'fail', 'error'].includes(snap.status)) {
+              if (snap && ['success', 'fail', 'error'].includes(snap.status)) {
                 const out =
                   (snap.bash_tasks || []).find((t) => t.output)?.output ??
                   (snap.tasks || []).find((t) => t.output)?.output
@@ -137,13 +154,15 @@ export const useRunStep = () => {
               return
             }
             if (kind === 'status') {
-              if (event.completed || event.status === 'failed') {
+              if (event.status === 'failed' || event.status === 'fail') {
                 resolved = true
                 controller.abort()
-                onUpdate?.(id, {
-                  status: event.status === 'completed' ? STEP_STATUS.SUCCESS : STEP_STATUS.ERROR,
-                  raw_log: event.status === 'completed' ? '' : event.status,
-                })
+                onUpdate?.(id, { status: STEP_STATUS.ERROR, raw_log: event.status })
+                return
+              }
+              if (event.completed) {
+                onUpdate?.(id, { status: STEP_STATUS.SUCCESS })
+                closeSoon()
                 return
               }
               onUpdate?.(id, { status: STEP_STATUS.RUNNING })

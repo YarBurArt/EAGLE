@@ -1,6 +1,7 @@
 import { api } from '../shared/api/axios'
 
 const BASE = '/cmd'
+const FETCH_BASE = '/api/cmd'
 
 export const chainApi = {
   list: () => api.get(`${BASE}/chains`).then((res) => res.data),
@@ -30,10 +31,56 @@ export const chainApi = {
       })
       .then((res) => res.data),
 
-  runChain: (chainId) =>
-    api
-      .post(`${BASE}/run-chain/${chainId}`, null, { params: { zero_display_id: 0 } })
-      .then((res) => res.data),
+  // run-chain streams one JSON line per executed step; consume it so the UI
+  // can report what actually happened instead of a blind "started"
+  runChain: async (chainId) => {
+    const response = await fetch(`${FETCH_BASE}/run-chain/${chainId}?zero_display_id=0`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { Accept: 'application/json' },
+    })
+    if (!response.ok) {
+      let detail = `run failed (${response.status})`
+      try {
+        detail = (await response.json()).detail || detail
+      } catch {
+        // keep the status line
+      }
+      throw new Error(detail)
+    }
+    if (!response.body) return { steps: [], errors: [] }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const steps = []
+    const errors = []
+    let buffer = ''
+
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      let newline = buffer.indexOf('\n')
+
+      while (newline !== -1) {
+        const line = buffer.slice(0, newline).trim()
+        buffer = buffer.slice(newline + 1)
+        if (line) {
+          try {
+            const payload = JSON.parse(line)
+            if (payload.AttackStep) steps.push(payload.AttackStep)
+            if (payload.error) errors.push(payload.error)
+          } catch {
+            // ignore a malformed line, keep reading
+          }
+        }
+        newline = buffer.indexOf('\n')
+      }
+    }
+
+    return { steps, errors }
+  },
 
   getCurrentUser: () => api.get('/users/me').then((res) => res.data),
 }
