@@ -36,6 +36,22 @@ PROJECT_DIR = Path(__file__).parent.parent.parent
 LOG_LEVEL: str = "INFO"
 DEBUG_MODE_C: bool = False  # CHANGE ME BEFORE RUN
 
+# document-analysis agent caps: uploads are untrusted, so bounds live in
+# code instead of env; not deployment knobs
+MAX_DOCUMENT_MB = 25
+# text kept per document after parsing; anything past it is marked truncated
+MAX_DOCUMENT_CHARS = 240_000
+# LLM working window and how many windows one run will pay for
+CHUNK_CHARS = 12_000
+MAX_CHUNKS = 40
+
+AGENT_DEFAULT_PROVIDER = "ollama"
+AGENT_TEMPERATURE = 0.1
+AGENT_TIMEOUT = 300
+OPENROUTER_REFERER = "https://github.com/eogod/EAGLE"
+
+AGENT_WORKSPACE_DIR = PROJECT_DIR / "data" / "agent"
+
 
 class Security(BaseModel):
     jwt_issuer: str = "my-app"
@@ -75,10 +91,15 @@ class LLMservice(BaseModel):
     """env format like LLMSERVICE__API_URL=http..."""
 
     local: int = 0
-    api_url: HttpUrl = "http://localhost:69228"  # Для локального Ollama
-    api_key: str = None
+    # standard Ollama port; override with LLMSERVICE__API_URL when proxied
+    api_url: HttpUrl = HttpUrl("http://localhost:11434")
+    api_key: str | None = None
     timeout: int = 120
     default_model: str = "mistral"
+
+    # optional: OpenRouter is selectable in the agent panel, key is all it needs
+    openrouter_api_key: SecretStr | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
 
 class Redis(BaseModel):
