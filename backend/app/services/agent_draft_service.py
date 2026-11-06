@@ -1,13 +1,9 @@
-"""Persistence, ownership rules and the LLM facade for the analysis agent."""
+"""Draft lifecycle and chain edits: the model proposes, the operator imports."""
 
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -15,27 +11,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.parsing import DocumentError, mime_of, parse_bytes, suffix_of
 from app.agent.validation import validate_draft
-from app.cmd.llm_analysis import (
-    ChatStreamProvider,
-    ProviderNotConfigured,
-    build_provider,
-    list_models,
-    llm_service,
-)
-from app.core.config import (
-    AGENT_WORKSPACE_DIR,
-    MAX_DOCUMENT_CHARS,
-    MAX_DOCUMENT_MB,
-    get_settings,
-    phases,
-)
+from app.core.config import get_settings, phases
 from app.models import (
-    AgentDocument,
-    AgentFinding,
-    AgentMessage,
-    AgentRun,
     AgentSession,
     AttackChain,
     AttackStep,
@@ -43,6 +21,7 @@ from app.models import (
     CurrentAttackPhase,
     User,
 )
+from app.services.agent_scope import owned_chain, owned_draft, owned_session
 
 # ask-mode chain snapshot is bounded so a long chain cannot eat the context
 _MAX_CHAIN_CONTEXT_CHARS = 8000
@@ -54,107 +33,9 @@ class EditError(RuntimeError):
     """one operation could not be applied; reported per-op, never aborts the run"""
 
 
-class AgentService:
+class AgentDraftService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
-
-    # headers/endpoints never import app/cmd directly; provider selection,
-    # provider listing and the chain-work g4f/ollama pool all go through here
-
-    def get_provider(
-        self, *, provider: str | None = None, model: str | None = None
-    ) -> ChatStreamProvider:
-        try:
-            return build_provider(
-                get_settings().llmservice, provider=provider, model=model
-            )
-        except ProviderNotConfigured as exc:
-            # a missing provider is config, not a crash; the SSE/UI maps it
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-            ) from exc
-
-    async def list_providers(self) -> dict[str, dict[str, Any]]:
-        return await list_models(get_settings().llmservice)
-
-    def llm_providers(self) -> dict[str, str]:
-        """registered g4f provider classes for the chain-work LLM path"""
-        return {name: p.__name__ for name, p in llm_service.providers.items()}
-
-    async def query_llm(self, prompt: str, provider_name: str | None = None) -> str:
-        return await llm_service.query_llm(prompt, provider_name)
-
-    async def query_llm_chat(
-        self, messages: list[dict[str, Any]], provider_name: str | None = None
-    ) -> str:
-        return await llm_service.query_llm_chat(messages, provider_name)
-
-    async def create_session(
-        self, user: User, *, chain_id: int | None = None, title: str | None = None
-    ) -> AgentSession:
-        if chain_id is not None:
-            await self._owned_chain(chain_id, user)
-        row = AgentSession(
-            user_id=user.user_id,
-            chain_id=chain_id,
-            title=(title or "New analysis").strip()[:256],
-            status="active",
-        )
-        self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
-
-    async def list_sessions(self, user: User) -> list[AgentSession]:
-        result = await self.session.scalars(
-            select(AgentSession)
-            .where(AgentSession.user_id == user.user_id)
-            .order_by(AgentSession.update_time.desc(), AgentSession.id.desc())
-        )
-        return list(result)
-
-    async def get_session(self, session_id: int, user: User) -> AgentSession:
-        row = await self.session.scalar(
-            select(AgentSession).where(
-                AgentSession.id == session_id,
-                AgentSession.user_id == user.user_id,
-            )
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="agent session not found"
-            )
-        return row
-
-    async def update_session(
-        self, session_id: int, user: User, *, title: str
-    ) -> AgentSession:
-        row = await self.get_session(session_id, user)
-        row.title = title.strip()[:256]
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
-
-    async def delete_session(self, session_id: int, user: User) -> None:
-        row = await self.get_session(session_id, user)
-        await self.session.delete(row)
-        await self.session.commit()
-
-    async def list_messages(self, session_id: int) -> list[AgentMessage]:
-        result = await self.session.scalars(
-            select(AgentMessage)
-            .where(AgentMessage.session_id == session_id)
-            .order_by(AgentMessage.id)
-        )
-        return list(result)
-
-    async def list_documents(self, session_id: int) -> list[AgentDocument]:
-        result = await self.session.scalars(
-            select(AgentDocument)
-            .where(AgentDocument.session_id == session_id)
-            .order_by(AgentDocument.id)
-        )
-        return list(result)
 
     async def get_latest_draft(self, session_id: int) -> ChainDraft | None:
         return await self.session.scalar(
@@ -163,189 +44,6 @@ class AgentService:
             .order_by(ChainDraft.id.desc())
             .limit(1)
         )
-
-    async def add_document(
-        self, session_id: int, user: User, *, filename: str, data: bytes
-    ) -> AgentDocument:
-        await self.get_session(session_id, user)
-        limit = MAX_DOCUMENT_MB * 1024 * 1024
-        if len(data) > limit:
-            raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail=f"document is larger than {MAX_DOCUMENT_MB} MB",
-            )
-
-        safe_name = Path(filename or "upload").name[:512]
-        try:
-            parsed = parse_bytes(safe_name, data, max_chars=MAX_DOCUMENT_CHARS)
-        except DocumentError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-            ) from exc
-
-        row = AgentDocument(
-            session_id=session_id,
-            filename=safe_name,
-            sha256=_sha256_hex(data),
-            mime=mime_of(safe_name),
-            size=len(data),
-            storage_path="",
-            parse_status="parsed",
-            page_count=parsed.page_count,
-            char_count=parsed.char_count,
-            truncated=parsed.truncated,
-            error=None,
-        )
-        self.session.add(row)
-        await self.session.flush()
-
-        session_dir = _workspace_dir() / str(session_id)
-        session_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        suffix = suffix_of(safe_name) or ".bin"
-        raw_path = session_dir / f"{row.id}-{row.sha256[:16]}{suffix}"
-        parsed_path = session_dir / f"{row.id}-{row.sha256[:16]}.pages.json"
-        raw_path.write_bytes(data)
-        parsed_path.write_text(
-            json.dumps(
-                {
-                    "extractor": parsed.extractor,
-                    "pages": [[page, text] for page, text in parsed.pages],
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
-        )
-        row.storage_path = str(raw_path)
-        row.parsed_path = str(parsed_path)
-        await self.session.commit()
-        await self.session.refresh(row)
-
-        return row
-
-    async def get_document(
-        self, document_id: int, user: User
-    ) -> tuple[AgentDocument, AgentSession]:
-        row = await self.session.scalar(
-            select(AgentDocument).where(AgentDocument.id == document_id)
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="document not found"
-            )
-        session_row = await self.get_session(row.session_id, user)
-        return row, session_row
-
-    def load_pages(self, document: AgentDocument) -> list[tuple[int | None, str]]:
-        if not document.parsed_path:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="document has no parsed text",
-            )
-        payload = json.loads(Path(document.parsed_path).read_text(encoding="utf-8"))
-        return [(page, text) for page, text in payload.get("pages", [])]
-
-    async def add_user_message(self, session_id: int, content: str) -> AgentMessage:
-        row = AgentMessage(
-            session_id=session_id,
-            role="user",
-            content=[{"type": "text", "text": content}],
-        )
-        self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
-
-    async def create_run(self, session_id: int, document_id: int | None) -> AgentRun:
-        row = AgentRun(
-            session_id=session_id,
-            document_id=document_id,
-            status="running",
-            cancel_requested=False,
-        )
-        self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
-
-    async def get_run(self, run_id: int, user: User) -> AgentRun:
-        row = await self.session.scalar(
-            select(AgentRun)
-            .join(AgentSession, AgentRun.session_id == AgentSession.id)
-            .where(
-                AgentRun.id == run_id,
-                AgentSession.user_id == user.user_id,
-            )
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="agent run not found"
-            )
-        return row
-
-    async def request_cancel(self, run_id: int) -> None:
-        row = await self.session.get(AgentRun, run_id)
-        if row is not None and row.status == "running":
-            row.cancel_requested = True
-            await self.session.commit()
-
-    async def attach_message_to_run(self, message_id: int, run_id: int) -> None:
-        row = await self.session.get(AgentMessage, message_id)
-        if row is not None:
-            row.run_id = run_id
-            await self.session.commit()
-
-    async def save_assistant_message(
-        self, session_id: int, run_id: int, content: list[dict[str, Any]]
-    ) -> AgentMessage:
-        row = AgentMessage(
-            session_id=session_id,
-            role="assistant",
-            content=content,
-            run_id=run_id,
-        )
-        self.session.add(row)
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
-
-    def make_finding_saver(
-        self, run: AgentRun
-    ) -> Callable[[dict[str, Any]], Awaitable[int]]:
-        """returns an async callback the pipeline uses to persist one finding."""
-        counter = {"index": 0}
-
-        async def save(finding: dict[str, Any]) -> int:
-            counter["index"] += 1
-            row = AgentFinding(
-                run_id=run.id,
-                session_id=run.session_id,
-                order_index=counter["index"],
-                stage=finding.get("stage"),
-                title=finding["title"],
-                description=finding.get("description") or "",
-                confidence=float(finding.get("confidence") or 0.0),
-                uncertainty=finding.get("uncertainty") or None,
-                evidence=finding.get("evidence") or [],
-                status="accepted",
-            )
-            self.session.add(row)
-            await self.session.commit()
-            await self.session.refresh(row)
-            return row.id
-
-        return save
-
-    async def finish_run(
-        self, run_id: int, *, status: str, error: str | None = None
-    ) -> None:
-        row = await self.session.get(AgentRun, run_id)
-        if row is None:
-            return
-        row.status = status
-        row.cancel_requested = status == "cancelled"
-        row.error = error
-        row.finished_at = datetime.now(UTC)
-        await self.session.commit()
 
     async def save_draft(
         self,
@@ -368,19 +66,11 @@ class AgentService:
         self.session.add(row)
         await self.session.commit()
         await self.session.refresh(row)
+
         return row
 
     async def get_draft(self, draft_id: int, user: User) -> ChainDraft:
-        row = await self.session.scalar(
-            select(ChainDraft).where(
-                ChainDraft.id == draft_id, ChainDraft.user_id == user.user_id
-            )
-        )
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="draft not found"
-            )
-        return row
+        return await owned_draft(self.session, draft_id, user)
 
     def build_import(
         self, draft: ChainDraft, *, chain_name: str, require_commands: bool = True
@@ -441,13 +131,13 @@ class AgentService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="draft was already imported",
             )
-        session_row = await self.get_session(draft.session_id, user)
+        session_row = await owned_session(self.session, draft.session_id, user)
         if session_row.chain_id is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="agent session is not bound to a chain",
             )
-        chain = await self._owned_chain(session_row.chain_id, user)
+        chain = await owned_chain(self.session, session_row.chain_id, user)
         if chain.chain_name != chain_name:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -501,6 +191,7 @@ class AgentService:
 
         draft.status = "imported"
         await self.session.commit()
+
         return {
             "draft_id": draft.id,
             "name": draft.name,
@@ -513,7 +204,7 @@ class AgentService:
         """compact, bounded snapshot of the chain for ask mode."""
         if session_row.chain_id is None:
             return ""
-        chain = await self._owned_chain(session_row.chain_id, user)
+        chain = await owned_chain(self.session, session_row.chain_id, user)
         current = await self.session.scalar(
             select(CurrentAttackPhase.phase).where(
                 CurrentAttackPhase.chain_id == chain.id
@@ -550,7 +241,8 @@ class AgentService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="agent session is not bound to a chain",
             )
-        return await self._owned_chain(session_row.chain_id, user)
+
+        return await owned_chain(self.session, session_row.chain_id, user)
 
     async def apply_edits(
         self,
@@ -614,6 +306,7 @@ class AgentService:
         self.session.add(row)
         await self.session.commit()
         await self.session.refresh(row)
+
         return {"op": "add_step", "status": "ok", "step_id": row.id}
 
     async def _chain_step(self, op: dict[str, Any], chain: AttackChain) -> AttackStep:
@@ -628,6 +321,7 @@ class AgentService:
         )
         if step is None:
             raise EditError(f"step {step_id} is not in this chain")
+
         return step
 
     async def _edit_remove_step(
@@ -642,6 +336,7 @@ class AgentService:
         step_id = step.id
         await self.session.delete(step)
         await self.session.commit()
+
         return {"op": "remove_step", "status": "ok", "step_id": step_id}
 
     async def _edit_run_step(
@@ -692,28 +387,5 @@ class AgentService:
             current.phase = phase
 
         await self.session.commit()
+
         return {"op": "set_phase", "status": "ok", "phase": phase}
-
-    async def _owned_chain(self, chain_id: int, user: User) -> AttackChain:
-        chain = await self.session.scalar(
-            select(AttackChain).where(
-                AttackChain.id == chain_id, AttackChain.user_id == user.user_id
-            )
-        )
-        if chain is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="chain not found"
-            )
-        return chain
-
-
-def _workspace_dir() -> Path:
-    AGENT_WORKSPACE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    return AGENT_WORKSPACE_DIR
-
-
-def _sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-__all__ = ["AgentService"]
