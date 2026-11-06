@@ -9,7 +9,9 @@ services:
     restart: unless-stopped
     image: postgres:18
     volumes:
-      - postgres_db:/var/lib/postgresql/data
+      # 18+ wants a single mount here; data lands in 18/docker
+      # pg17 data stays in the old backend_postgres_db volume as a fallback
+      - postgres_db_v18:/var/lib/postgresql
     environment:
       - POSTGRES_DB=${DATABASE__DB}
       - POSTGRES_USER=${DATABASE__USERNAME}
@@ -30,4 +32,4 @@ services:
       - "${REDIS__PORT}:6379"
 
 volumes:
-  postgres_db:
+  postgres_db_v18:
