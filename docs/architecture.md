@@ -5,8 +5,8 @@ record, Valkey for hot task state, and Mythic C2 as the execution backend. Opera
 and LLM suggestions become `AttackChain` rows, and those rows are replayed through Mythic
 agents or local bash.
 
-This document describes the runtime modules, how they relate, and the database model.
-It does not repeat installation steps - see the main [README](../README.md) for that.
+The runtime modules, how they connect, and the database model follow. Installation steps
+are in the [README](../README.md).
 
 ## Technology overview
 
@@ -133,20 +133,23 @@ flowchart LR
 panel; `entities/` holds the API clients; `features/` holds the run and phase hooks;
 `widgets/` holds the canvas cards and navigation; `shared/` holds axios and run control.
 
-`app/main.py` opens the Mythic connection and the event service at startup, and hands the
-finished `TTPInfoService` to `tasks_mcp`, then mounts `/api`, `/mcp`, and the built
+`app/main.py` opens the Mythic connection and the event service at startup, hands the
+finished `TTPInfoService` to `tasks_mcp`, and mounts `/api`, `/mcp`, and the built
 frontend. `app/api/api_router.py` wires the endpoint files, which validate input and call
 a service or the database session directly (`auth.py`, `users.py`, `kill_chain.py`).
-Endpoints never import `app/cmd/*` themselves: `app/services/*` owns chain, task, agent
-persistence, and all LLM access flows through `AgentChatService`
-(`app/services/agent_chat_service.py`) on top of `app/cmd/llm_analysis.py`, which holds
-both the chain-work pool (`LLMService`) and the streaming agent providers
-(`build_provider`, `list_models`). Agent state is split across three services —
-`AgentChatService` (sessions, messages, runs, LLM facade),
-`AgentDocumentService` (untrusted uploads and parsing), and `AgentDraftService`
-(drafts, validation, chain import and edit operations) — with shared ownership checks in
-`app/services/agent_scope.py`. Chain execution goes through `app/cmd/proc.py`; Mythic
-tasking is `app/cmd/c2_tool.py`; local commands are `app/cmd/local_bash.py`.
+Endpoints never import `app/cmd/*`; `app/services/*` owns chain, task, and agent
+persistence, and all LLM access goes through `AgentChatService`
+(`app/services/agent_chat_service.py`) on top of `app/cmd/llm_analysis.py`. That module
+holds both the chain-work pool (`LLMService`) and the streaming agent providers
+(`build_provider`, `list_models`).
+
+Agent state is split across three services: `AgentChatService` (sessions, messages, runs,
+LLM facade), `AgentDocumentService` (untrusted uploads and parsing), and
+`AgentDraftService` (drafts, validation, chain import and edit operations). Shared
+ownership checks live in `app/services/agent_scope.py`.
+
+Chain execution goes through `app/cmd/proc.py`; Mythic tasking is in
+`app/cmd/c2_tool.py`; local commands run in `app/cmd/local_bash.py`.
 `app/cmd/mythic_events.py` is the only bridge that turns Mythic task events into Valkey
 rows and NDJSON/SSE. `app/core/*` holds config, JWT/bcrypt, and the async database
 session; the agent's safety caps (document size, chunking, temperature) live there as
@@ -168,7 +171,8 @@ bash logs and parsed uploads stay in `backend/data/` and are referenced by path.
 ## Database model
 
 PostgreSQL is the durable store. Every model inherits `create_time` and `update_time` from
-`Base`; only key columns are shown below. The full schema is `backend/app/models.py`.
+`Base`; only the important columns are shown below. The full schema is in
+`backend/app/models.py`.
 
 ```mermaid
 %%{init: {"er": {"diagramPadding": 10, "minEntityWidth": 55, "minEntityHeight": 24, "entityPadding": 8}}}%%
@@ -293,8 +297,6 @@ erDiagram
     end
 ```
 
-Entities are grouped into `auth`, `chain_management`, `status`, and `llm_agent` boxes.
-Relationship names are omitted to keep the diagram compact; cardinality and the FK
-columns carry the shape. `CURRENT_ATTACK_PHASE` is one row per chain, `AGENT_FINDING`
-keeps `session_id` alongside `run_id` for cheap session cleanup, and `CHAIN_DRAFT` stays
-JSONB until the operator imports it into typed `ATTACK_STEP` rows.
+`CURRENT_ATTACK_PHASE` is one row per chain, `AGENT_FINDING` keeps `session_id` alongside
+`run_id` for cheap session cleanup, and `CHAIN_DRAFT` stays JSONB until the operator
+imports it into typed `ATTACK_STEP` rows.

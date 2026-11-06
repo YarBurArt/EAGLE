@@ -1,8 +1,8 @@
 # EAGLE - Emulated Attack Generator w/ Layered Engine
 
-[English version](https://github.com/eogod/EAGLE/blob/main/README.md)
+[English version](../README.md)
 
-[Архитектура](https://github.com/eogod/EAGLE/blob/main/docs/architecture.md)
+[Архитектура](architecture.md)
 
 Генератор атак с многоуровневым движком (Emulated Attack Generator with Layered Engine, eagle) - это интерактивная система для построения и выполнения реалистичных цепочек атак на основе стадий [Унифицированный килчейн](https://www.unifiedkillchain.com/) и поддерживает динамическое формирование цепочек атак в реальном времени. Работает в контексте API, использующего внутри GraphQL и библиотеку Mythic, с минимальным интерфейсом.
 
@@ -73,7 +73,7 @@ LLMSERVICE__TIMEOUT=120
 LLMSERVICE__DEFAULT_MODEL=qwen3.5
 ```
 Ориентир по выбору модели: https://artificialanalysis.ai/models/open-source/small
-иначе значения будут взяты из [конфига](https://github.com/eogod/EAGLE/blob/main/backend/app/core/config.py), и вы можете увидеть валидацию и типы там.
+иначе значения будут взяты из [конфига](../backend/app/core/config.py), и вы можете увидеть валидацию и типы там.
 
 OpenRouter необязателен и требует только ключ (и base URL, если используете прокси):
 ```env

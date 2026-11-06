@@ -1,8 +1,8 @@
 # EAGLE - Emulated Attack Generator w/ Layered Engine
 
-[Russian version](https://github.com/eogod/EAGLE/blob/main/docs/README-ru.md)
+[Russian version](docs/README-ru.md)
 
-[Architecture](https://github.com/eogod/EAGLE/blob/main/docs/architecture.md)
+[Architecture](docs/architecture.md)
 
 The Emulated Attack Generator with Layered Engine is an interactive system for building
 and executing realistic attack chains based on the [Unified Cyber Kill Chain](https://www.unifiedkillchain.com/) stages and supports the dynamic formation of attack chains in real
@@ -73,7 +73,7 @@ LLMSERVICE__DEFAULT_MODEL=qwen3.5
 ```
 Model choice reference: https://artificialanalysis.ai/models/open-source/small
 
-Otherwise, the values will be taken from the [config](https://github.com/eogod/EAGLE/blob/main/backend/app/core/config.py), and you can see the validation there.
+Otherwise, the values will be taken from the [config](backend/app/core/config.py), and you can see the validation there.
 
 OpenRouter is optional and only needs the key (and base URL if you proxy it):
 ```env
