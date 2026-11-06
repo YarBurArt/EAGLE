@@ -9,7 +9,7 @@ import { useRunPhase } from '../../features/useRunPhase'
 import { useAddPhase } from '../../features/useAddPhase'
 import { toast } from 'react-toastify'
 
-export const ChainCanvas = ({ currentChain, onSetPhase }) => {
+export const ChainCanvas = ({ currentChain, onSetPhase, reloadToken = 0, layout = 'columns' }) => {
   const tempIdRef = useRef(0)
 
   const [phases, setPhases] = useState(() => {
@@ -21,9 +21,12 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
     return phase ? { [phase.id]: 420 } : {}
   })
   const [stepsByPhase, setStepsByPhase] = useState({})
+  // updateStep needs to know whether a step exists in the DB; keep the latest lists
+  const stepsRef = useRef(stepsByPhase)
 
   useEffect(() => {
     if (!currentChain) return
+
     const loadSteps = async () => {
       try {
         const data = await chainApi.getChainWithSteps(currentChain.chain_id)
@@ -54,25 +57,104 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
             raw_log: step.raw_log,
           })
         }
+
         setPhases((prev) => {
           const existingIds = new Set(prev.map((p) => p.id))
           const newPhases = phasesFromSteps.filter((p) => !existingIds.has(p.id))
           if (newPhases.length === 0) return prev
           return [...prev, ...newPhases].sort((a, b) => a.order - b.order)
         })
+
         setStepsByPhase((prev) => {
           const hasExistingSteps = Object.values(prev).some((s) => s.length > 0)
           if (hasExistingSteps) return prev
           return stepsByPhaseMap
         })
       } catch {
-        toast.error('Steps load failed, backend maybe died')
+        toast.error('Could not load steps for this chain')
       }
     }
     loadSteps()
   }, [currentChain])
 
-  const updateStep = useCallback(async (stepId, patch) => {
+  useEffect(() => {
+    stepsRef.current = stepsByPhase
+  }, [stepsByPhase])
+
+  // Agent proposals replace unexecuted rows in the DB; refetch after an import
+  // instead of guessing, and keep not-yet-saved local steps on top.
+  useEffect(() => {
+    if (!reloadToken || !currentChain) return
+
+    let alive = true
+    const refresh = async () => {
+      try {
+        const data = await chainApi.getChainWithSteps(currentChain.chain_id)
+        if (!alive) return
+
+        const map = {}
+        const phasesFromSteps = []
+
+        for (const step of data.steps) {
+          const phaseObj = UCKC_PHASES.find((p) => p.name === step.phase)
+          const phaseId = phaseObj ? phaseObj.id : step.phase
+          const isAgent = step.step_type === 'agent'
+          if (!map[phaseId]) {
+            map[phaseId] = []
+            if (phaseObj) phasesFromSteps.push(phaseObj)
+          }
+          map[phaseId].push({
+            id: step.id,
+            chain_name: currentChain.chain_name,
+            step_type: step.step_type ?? STEP_TYPES.LOCAL,
+            callback_display_id: step.callback_display_id ?? 0,
+            tool_name: step.tool_name,
+            command: isAgent ? '' : step.command,
+            command_params: isAgent ? step.command : '',
+            tool: isAgent ? step.tool_name : 'shell',
+            status: step.status,
+            raw_log: step.raw_log,
+          })
+        }
+
+        setPhases((prev) => {
+          const known = new Set(prev.map((p) => p.id))
+          const added = phasesFromSteps.filter((p) => !known.has(p.id))
+          return added.length ? [...prev, ...added].sort((a, b) => a.order - b.order) : prev
+        })
+
+        setWidths((prev) => {
+          const next = { ...prev }
+          for (const phase of phasesFromSteps) {
+            if (next[phase.id] == null) next[phase.id] = 420
+          }
+          return next
+        })
+
+        setStepsByPhase((prev) => {
+          const localOnly = {}
+          for (const [phaseId, list] of Object.entries(prev)) {
+            const kept = list.filter((step) => step.id == null)
+            if (kept.length) localOnly[phaseId] = kept
+          }
+          const merged = { ...map }
+          for (const [phaseId, list] of Object.entries(localOnly)) {
+            merged[phaseId] = [...list, ...(merged[phaseId] ?? [])]
+          }
+          return merged
+        })
+      } catch {
+        toast.error('Could not refresh the chain')
+      }
+    }
+    refresh()
+
+    return () => {
+      alive = false
+    }
+  }, [reloadToken, currentChain])
+
+  const updateStep = useCallback(async (stepId, patch, localOnly = false) => {
     setStepsByPhase((prev) => {
       const next = { ...prev }
       for (const phase of Object.keys(next)) {
@@ -82,30 +164,45 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
       }
       return next
     })
-    if (stepId) {
+
+    const isLocalOnly =
+      localOnly ||
+      Object.values(stepsRef.current).some((list) => list.some((step) => step._tempId === stepId))
+    // status/output belong to the backend: a late PATCH("running") must never
+    // overwrite the worker's "success". Only user edits are persisted.
+    const isEdit =
+      patch.command !== undefined ||
+      patch.tool_name !== undefined ||
+      patch.step_type !== undefined ||
+      patch.callback_display_id !== undefined
+
+    // temp/imported steps have no DB row yet; a PATCH would 404 them
+    if (!isLocalOnly && isEdit) {
       try {
         await stepApi.updateStep(stepId, patch)
-        // cuz AttackStep table doesn't store specific order for now, so move step to the end of phase
-        setStepsByPhase((prev) => {
-          const next = { ...prev }
-          for (const phase of Object.keys(next)) {
-            const list = next[phase]
-            const idx = list.findIndex((s) => s.id === stepId || s._tempId === stepId)
-            if (idx !== -1) {
-              const [moved] = list.splice(idx, 1)
-              next[phase] = [...list, moved]
-              break
+        // only an edited command/tool changes the chain order; status and
+        // output patches must not move the card
+        if (isEdit) {
+          setStepsByPhase((prev) => {
+            const next = { ...prev }
+            for (const phase of Object.keys(next)) {
+              const list = next[phase]
+              const idx = list.findIndex((s) => s.id === stepId || s._tempId === stepId)
+              if (idx !== -1) {
+                const [moved] = list.splice(idx, 1)
+                next[phase] = [...list, moved]
+                break
+              }
             }
-          }
-          return next
-        })
-        if (patch.command || patch.tool_name) {
-          toast.info(
-            'Step will be placed at the end of the chain after reload (due to AttackStep table ordering)',
-          )
+            return next
+          })
+        }
+
+        if (isEdit && (patch.command !== undefined || patch.tool_name !== undefined)) {
+          toast.info('Step moved to the end of its phase')
         }
       } catch {
-        toast.error('Step update failed, check backend connection')
+        toast.error('Could not save the step')
       }
     }
   }, [])
@@ -117,6 +214,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   const addStep = useCallback(
     (phaseId) => {
       tempIdRef.current += 1
+
       // default API vars for run-command's
       const newStep = {
         _tempId: tempIdRef.current,
@@ -130,6 +228,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
         status: STEP_STATUS.PENDING,
         raw_log: '',
       }
+
       setStepsByPhase((prev) => ({
         ...prev,
         [phaseId]: [...(prev[phaseId] ?? []), newStep],
@@ -147,9 +246,10 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
         try {
           await stepApi.deleteStep(stepId)
         } catch {
-          toast.error('Step delete failed, maybe not found')
+          toast.error('Could not delete the step')
         }
       }
+
       setStepsByPhase((prev) => {
         const next = { ...prev }
         for (const phase of Object.keys(next)) {
@@ -169,6 +269,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   // so if phase without runned steps, then should be store on frontend side for now
   const removePhase = useCallback((phaseId) => {
     if (!window.confirm('Remove this phase?')) return
+
     setPhases((prev) => prev.filter((p) => p.id !== phaseId))
     setStepsByPhase((prev) => {
       const { [phaseId]: _, ...rest } = prev
@@ -179,6 +280,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   const insertPhaseAfter = useCallback((afterId, newPhaseId) => {
     const newPhase = UCKC_PHASES.find((p) => p.id === newPhaseId)
     if (!newPhase) return
+
     setPhases((prev) => {
       const idx = prev.findIndex((p) => p.id === afterId)
       if (idx === -1) return prev
@@ -190,6 +292,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   const insertPhaseBefore = useCallback((beforeId, newPhaseId) => {
     const newPhase = UCKC_PHASES.find((p) => p.id === newPhaseId)
     if (!newPhase) return
+
     setPhases((prev) => {
       const idx = prev.findIndex((p) => p.id === beforeId)
       if (idx === -1) return prev
@@ -207,6 +310,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
       } catch {
         return
       }
+
       insertPhaseAfter(originId, newPhaseId)
     },
     [currentChain, handleAddPhase, insertPhaseAfter],
@@ -221,6 +325,7 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
       } catch {
         return
       }
+
       insertPhaseBefore(originId, newPhaseId)
     },
     [currentChain, handleAddPhase, insertPhaseBefore],
@@ -229,8 +334,14 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
   const existingOrders = phases.map((p) => p.order)
 
   return (
-    <main className="flex-1 overflow-x-auto p-4">
-      <div className="flex min-w-max items-start gap-4">
+    <main className="flex-1 overflow-auto p-4">
+      <div
+        className={
+          layout === 'rows'
+            ? 'mx-auto flex w-full max-w-[1100px] flex-col gap-3'
+            : 'flex min-w-max items-start gap-4'
+        }
+      >
         {phases.map((phase, idx) => (
           <Column
             key={phase.id}
@@ -244,13 +355,16 @@ export const ChainCanvas = ({ currentChain, onSetPhase }) => {
             onDeleteStep={deleteStep}
             onRunStep={(step) => run(step, phase.name, currentChain.chain_id, updateStep)}
             onCopyStep={copyStep}
-            onRunPhase={() => runPhase(phase.id, stepsByPhase[phase.id] ?? [])}
+            onRunPhase={() =>
+              runPhase(phase.name, currentChain.chain_id, stepsByPhase[phase.id] ?? [])
+            }
             onInsertPhase={onInsertPhase}
             onInsertPhaseBefore={onInsertPhaseBefore}
             onRemovePhase={() => removePhase(phase.id)}
             onSetPhase={onSetPhase}
             isActive={phase.name === currentChain.current_phase_name}
             isLast={idx === phases.length - 1}
+            stacked={layout === 'rows'}
             existingOrders={existingOrders}
           />
         ))}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/shared/api/axios'
+import { UCKC_PHASES } from '@/shared/config/mitre'
 
 export const Login = () => {
   const [email, setEmail] = useState('')
@@ -11,6 +12,7 @@ export const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErr('')
+
     try {
       const body = new URLSearchParams({ username: email, password })
       await api.post('/auth/access-token', body, {
@@ -27,51 +29,92 @@ export const Login = () => {
       if (Array.isArray(detail)) {
         setErr(detail.map((e) => e.msg).join(', '))
       } else {
-        setErr(detail || 'Login failed, sorry')
+        setErr(detail || 'Sign in failed')
       }
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-app">
-      <form
-        onSubmit={handleSubmit}
-        id="loginForm"
-        className="w-120 bg-card border border-subtle rounded-md p-4 flex flex-col gap-4"
-      >
-        <h2 className="text-lg font-bold text-primary tracking-wider">EAGLE Login</h2>
+    <div className="flex min-h-screen bg-app text-primary">
+      <aside className="hidden w-[38%] max-w-[520px] shrink-0 flex-col justify-between border-r border-subtle bg-nav p-8 lg:flex">
+        <div>
+          <div className="text-[18px] font-medium tracking-[0.02em] text-primary">EAGLE</div>
+          <p className="mt-3 max-w-[34ch] text-[13px] leading-relaxed text-secondary">
+            Emulated attack generator for replaying Unified Kill Chain stages on a lab range
+          </p>
+        </div>
 
-        <label className="text-xs text-muted text-left">Email</label>
-        <input
-          type="email"
-          id="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Registered email"
-          required
-          className="w-full px-3 py-2 bg-input border border-default rounded text-sm text-primary outline-none focus:border-accent transition-colors"
-        />
+        <div>
+          <div className="mb-3 font-mono text-[11px] text-muted">18 stages · one chain</div>
+          <ol className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+            {UCKC_PHASES.map((phase) => (
+              <li
+                key={phase.id}
+                className="flex items-baseline gap-2 font-mono text-[11px] text-muted"
+              >
+                <span className="tabular-nums text-strong">
+                  {String(phase.order).padStart(2, '0')}
+                </span>
+                <span className="truncate">{phase.name}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </aside>
 
-        <label className="text-xs text-muted text-left">Password</label>
-        <input
-          type="password"
-          id="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Super_secret_password"
-          required
-          className="w-full px-3 py-2 bg-input border border-default rounded text-sm text-primary outline-none focus:border-accent transition-colors"
-        />
+      <main className="flex flex-1 items-center justify-center px-6">
+        <div className="w-full max-w-[360px]">
+          <h1 className="text-[20px] font-medium text-primary">Sign in</h1>
+          <p className="mt-1 text-[12px] text-muted">
+            Use the account created by your administrator
+          </p>
 
-        <button
-          type="submit"
-          className="w-full py-2 bg-accent text-white text-sm font-medium rounded hover:opacity-90 transition-opacity"
-        >
-          Sign in
-        </button>
-        <p className="text-primary">An account can be created by admin</p>
-        {err && <p className="text-xs text-danger">{err}</p>}
-      </form>
+          <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-4">
+            <div>
+              <label htmlFor="email" className="mb-1.5 block text-[11px] text-muted">
+                Email
+              </label>
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="username"
+                required
+                className="h-9 w-full rounded-md border border-subtle bg-input px-3 text-[13px] text-primary outline-none transition-colors focus:border-accent"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="password" className="mb-1.5 block text-[11px] text-muted">
+                Password
+              </label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                className="h-9 w-full rounded-md border border-subtle bg-input px-3 text-[13px] text-primary outline-none transition-colors focus:border-accent"
+              />
+            </div>
+
+            {err && <p className="text-[12px] text-danger">{err}</p>}
+
+            <button
+              type="submit"
+              className="mt-2 h-9 w-full rounded-md bg-accent text-[13px] font-medium text-app transition-colors hover:bg-accent/90"
+            >
+              Sign in
+            </button>
+          </form>
+
+          <p className="mt-6 text-[11px] text-muted">
+            Lost access? Ask an administrator to reset the password
+          </p>
+        </div>
+      </main>
     </div>
   )
 }

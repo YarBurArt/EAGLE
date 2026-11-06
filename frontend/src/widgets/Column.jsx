@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { StepCard } from './StepCard'
 import { getAvailablePhasesAfter, getAvailablePhasesBefore } from '../shared/config/mitre'
-import { PlusCircleIcon, MinusCircleIcon, PlayIcon, XIcon } from '@phosphor-icons/react'
+import { MinusIcon, PlayIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
 import { IconButton, DashedIconButton, DropdownItem } from './UIComponents'
 
 // for column resize
@@ -27,6 +27,7 @@ export const Column = ({
   onSetPhase,
   isActive,
   isLast,
+  stacked = false,
   existingOrders,
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -38,6 +39,7 @@ export const Column = ({
 
   useEffect(() => {
     if (!dropdownOpen) return
+
     const onClick = (e) => {
       // if click outside new Next phase dropdown menu then close
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -50,6 +52,7 @@ export const Column = ({
 
   useEffect(() => {
     if (!beforeDropdownOpen) return
+
     const onClick = (e) => {
       // if click outside new Prev phase dropdown menu then close
       if (beforeDropdownRef.current && !beforeDropdownRef.current.contains(e.target)) {
@@ -80,6 +83,7 @@ export const Column = ({
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
     }
+
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
   }
@@ -102,45 +106,51 @@ export const Column = ({
   return (
     <>
       <div
-        className="shrink-0 cursor-pointer"
-        style={{ width: `${width}px` }}
+        className={stacked ? 'w-full cursor-pointer' : 'shrink-0 cursor-pointer'}
+        style={stacked ? undefined : { width: `${width}px` }}
         onClick={() => onSetPhase(phase.name)}
       >
         <div
-          className={`relative mb-2 flex items-center justify-between gap-2 rounded-md border border-subtle bg-card p-2 ${isActive ? 'ring-1 ring-accent' : ''}`}
+          className={`relative mb-3 flex items-center justify-between gap-2 rounded-md border border-subtle bg-card px-3 py-2 ${
+            isActive ? 'border-l-2 border-l-accent border-y-subtle border-r-subtle' : ''
+          }`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="shrink-0 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+          <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
               {String(phase.order).padStart(2, '0')}
             </span>
-            <span className="truncate text-xs font-semibold text-primary">{phase.name}</span>
+            <span
+              className={`truncate text-[13px] ${isActive ? 'text-primary' : 'text-secondary'}`}
+            >
+              {phase.name}
+            </span>
           </div>
 
-          <div className="flex shrink-0 gap-1">
+          <div className="flex shrink-0 gap-0.5">
             <DashedIconButton
               onClick={() => setBeforeDropdownOpen((v) => !v)}
               title="Insert phase before"
             >
-              <MinusCircleIcon />
+              <MinusIcon size={14} />
             </DashedIconButton>
             <DashedIconButton onClick={() => setDropdownOpen((v) => !v)} title="Insert phase after">
-              <PlusCircleIcon />
+              <PlusIcon size={14} />
             </DashedIconButton>
-            <IconButton onClick={onRunPhase} title="Run all steps in phase" hover="success">
-              <PlayIcon />
+            <IconButton onClick={onRunPhase} title="Run all steps in phase">
+              <PlayIcon size={14} />
             </IconButton>
-            <IconButton onClick={onRemovePhase} title="Remove phase" hover="danger">
-              <XIcon />
+            <IconButton onClick={onRemovePhase} title="Remove phase">
+              <XIcon size={14} />
             </IconButton>
           </div>
 
           {dropdownOpen && (
             <div
               ref={dropdownRef}
-              className="absolute right-0 top-full z-50 mt-1 max-h-80 min-w-[280px] overflow-y-auto rounded-md border border-default bg-dropdown shadow-xl"
+              className="absolute right-0 top-full z-50 mt-1 max-h-80 min-w-[280px] overflow-y-auto rounded-lg border border-subtle bg-dropdown shadow-2xl shadow-black/40"
             >
-              <div className="sticky top-0 bg-dropdown px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              <div className="sticky top-0 bg-dropdown px-3 py-2 text-[11px] text-muted">
                 Insert after {phase.name}
               </div>
               <input
@@ -148,8 +158,8 @@ export const Column = ({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="w-full border-b border-subtle bg-dropdown px-3 py-1.5 text-xs text-primary outline-none"
+                placeholder="Search phases"
+                className="w-full border-y border-subtle bg-input px-3 py-2 text-xs text-primary outline-none placeholder:text-muted"
               />
               {filteredPhases.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-muted">No available phases</div>
@@ -164,8 +174,8 @@ export const Column = ({
                     }}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-primary">{p.name}</div>
-                      <div className="text-[10px] text-muted">{p.desc}</div>
+                      <div className="text-xs text-primary">{p.name}</div>
+                      <div className="mt-0.5 text-[11px] leading-snug text-muted">{p.desc}</div>
                     </div>
                     <span className="text-muted">+</span>
                   </DropdownItem>
@@ -177,9 +187,9 @@ export const Column = ({
           {beforeDropdownOpen && (
             <div
               ref={beforeDropdownRef}
-              className="absolute right-0 top-full z-50 mt-1 max-h-80 min-w-[280px] overflow-y-auto rounded-md border border-default bg-dropdown shadow-xl"
+              className="absolute right-0 top-full z-50 mt-1 max-h-80 min-w-[280px] overflow-y-auto rounded-lg border border-subtle bg-dropdown shadow-2xl shadow-black/40"
             >
-              <div className="sticky top-0 bg-dropdown px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted">
+              <div className="sticky top-0 bg-dropdown px-3 py-2 text-[11px] text-muted">
                 Insert before {phase.name}
               </div>
               <input
@@ -187,8 +197,8 @@ export const Column = ({
                 type="text"
                 value={beforeSearch}
                 onChange={(e) => setBeforeSearch(e.target.value)}
-                placeholder="Search..."
-                className="w-full border-b border-subtle bg-dropdown px-3 py-1.5 text-xs text-primary outline-none"
+                placeholder="Search phases"
+                className="w-full border-y border-subtle bg-input px-3 py-2 text-xs text-primary outline-none placeholder:text-muted"
               />
               {filteredPhasesBefore.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-muted">No available phases</div>
@@ -203,8 +213,8 @@ export const Column = ({
                     }}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-primary">{p.name}</div>
-                      <div className="text-[10px] text-muted">{p.desc}</div>
+                      <div className="text-xs text-primary">{p.name}</div>
+                      <div className="mt-0.5 text-[11px] leading-snug text-muted">{p.desc}</div>
                     </div>
                     <span className="text-muted">+</span>
                   </DropdownItem>
@@ -216,14 +226,15 @@ export const Column = ({
 
         <div className="space-y-0">
           {steps.length === 0 ? (
-            <div className="rounded-md border border-dashed border-subtle p-5 text-center text-xs text-muted">
+            <div className="rounded-md border border-dashed border-subtle px-4 py-6 text-center text-xs text-muted">
               No steps yet
             </div>
           ) : (
-            steps.map((step) => (
+            steps.map((step, stepIndex) => (
               <StepCard
                 key={step.id ?? step._tempId}
                 step={step}
+                ordinal={stepIndex + 1}
                 onRun={onRunStep}
                 onDelete={onDeleteStep}
                 onCopy={onCopyStep}
@@ -238,18 +249,18 @@ export const Column = ({
             e.stopPropagation()
             onAddStep()
           }}
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-default bg-transparent py-2 text-xs text-muted transition-colors hover:border-accent hover:bg-accent/5 hover:text-accent"
+          className="mt-2 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-subtle bg-transparent text-xs text-secondary transition-colors hover:border-default hover:bg-card hover:text-primary"
         >
-          <PlusCircleIcon /> Add step
+          <PlusIcon size={14} /> Add step
         </button>
       </div>
 
-      {!isLast && (
+      {!isLast && !stacked && (
         <div
           onMouseDown={startResize}
           className="group flex w-2 shrink-0 cursor-col-resize items-center justify-center"
         >
-          <div className="h-8 w-0.5 rounded bg-default transition-all group-hover:h-12 group-hover:bg-accent" />
+          <div className="h-8 w-px rounded bg-subtle transition-colors group-hover:bg-default" />
         </div>
       )}
     </>
