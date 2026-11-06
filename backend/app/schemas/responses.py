@@ -73,7 +73,8 @@ class AttackStepResponse(BaseResponse):
     step_type: str = "local"
     tool_name: str
     command: str
-    callback_display_id: int
+    # synthetic: only the chain-with-steps path joins Agent rows; 0 is safe
+    callback_display_id: int = 0
     mythic_payload_uuid: str | UUID4
     status: str
     raw_log: str

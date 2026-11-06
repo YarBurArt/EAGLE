@@ -61,9 +61,8 @@ class ToolContext:
 _auth = AuthState()
 _ctx: ToolContext | None = None
 _ctx_lock = asyncio.Lock()
-# loaded startup from main.py
-_attack_graph = None
-_apt_chain_index = None
+# finished service from main lifespan
+_ttp_service: TTPInfoService | None = None
 
 
 def _env(name: str) -> str:
@@ -114,9 +113,9 @@ async def _get_ctx() -> ToolContext:
 
 
 def _get_ttp_service() -> TTPInfoService:
-    if _attack_graph is None:
-        raise ValueError("MITRE ATT&CK data not loaded at startup")
-    return TTPInfoService(_attack_graph, _apt_chain_index)
+    if _ttp_service is None:
+        raise ValueError("MITRE ATT&CK service not loaded at startup")
+    return _ttp_service
 
 
 @mcp.tool()

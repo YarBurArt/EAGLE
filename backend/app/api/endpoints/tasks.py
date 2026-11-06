@@ -122,6 +122,7 @@ async def run_local_command(
         phase_name,
         current_user,
         data.is_analyze_llm,
+        step_id=data.step_id,
     )
     return LocalCommandResponse(
         chain_name=chain_name,
@@ -145,7 +146,7 @@ async def run_bash_command(
         data.chain_name, current_user
     )
     result = await bash_service.start(
-        data.command, chain_name, current_user, data.timeout
+        data.command, chain_name, current_user, data.timeout, step_id=data.step_id
     )
     return BashCommandResponse(step_type="bash", **result)
 
@@ -172,6 +173,7 @@ async def run_agent_command(
         phase_name,
         current_user,
         data.is_analyze_llm,
+        step_id=data.step_id,
     )
     return LocalCommandResponse(
         chain_name=chain_name,

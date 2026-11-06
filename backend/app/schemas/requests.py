@@ -40,6 +40,8 @@ class LocalCommandRequest(BaseRequest):
     callback_display_id: int
     command: str
     is_analyze_llm: bool = False
+    # execute this existing (unexecuted) row instead of inserting a new one
+    step_id: int | None = None
 
 
 class BashCommandRequest(BaseRequest):
@@ -48,6 +50,7 @@ class BashCommandRequest(BaseRequest):
     chain_name: str
     command: str
     timeout: int = 300
+    step_id: int | None = None
 
 
 class AgentCommandRequest(BaseRequest):
@@ -56,6 +59,7 @@ class AgentCommandRequest(BaseRequest):
     command_params: str | None = "uname -a;lscpu;free;df;id;pwd;lsblk"
     tool: str | None = "shell"
     is_analyze_llm: bool = False
+    step_id: int | None = None
 
 
 class ActionApprovalRequest(BaseModel):
