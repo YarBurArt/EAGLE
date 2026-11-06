@@ -1,5 +1,9 @@
 # EAGLE - Emulated Attack Generator w/ Layered Engine
 
+[English version](https://github.com/eogod/EAGLE/blob/main/README.md)
+
+[Архитектура](https://github.com/eogod/EAGLE/blob/main/docs/architecture.md)
+
 Генератор атак с многоуровневым движком (Emulated Attack Generator with Layered Engine, eagle) - это интерактивная система для построения и выполнения реалистичных цепочек атак на основе стадий [Унифицированный килчейн](https://www.unifiedkillchain.com/) и поддерживает динамическое формирование цепочек атак в реальном времени. Работает в контексте API, использующего внутри GraphQL и библиотеку Mythic, с минимальным интерфейсом.
 
 Платформа функционирует через инфраструктуру Mythic C2 + агенты, нулевой агент и поддерживает генерацию новых агентов во время атаки, эмулируя боковое перемещение и закрепление в инфраструктуре.
@@ -54,49 +58,54 @@ MYTHIC__PASSWORD=super_secret_password
 MYTHIC__SERVER_PORT=7443
 MYTHIC__TIMEOUT=-1
 MYTHIC__PAYLOAD_PORT_HTTP=1337
+
+REDIS__PASSWORD=super_secret_password
+REDIS__PORT=6379
 ```
 
-Если вам нужен локальный LLM через [ollama](https://github.com/ollama/ollama), добавьте в `env` также следующее. Мы рекомендуем эти модели [Mistral](https://ollama.com/library/mistral), [Qwen3-ab](https://ollama.com/jaahas/qwen3-abliterated), [llama3.1:8b](https://ollama.com/library/llama3.1), [llama3.1-ab:8b](https://ollama.com/mannix/llama3.1-8b-abliterated) (более свободный), [Qwen2.5-coder:32b](https://ollama.com/library/qwen2.5-coder) в зависимости от ваших ресурсов.
+Если вам нужен локальный LLM через [ollama](https://github.com/ollama/ollama), добавьте в `env` также следующее. Мы рекомендуем эти модели [qwen3.5 4-9b](https://ollama.com/library/qwen3.5), [qwen3.8 27b](https://ollama.com/library/qwen3.8), [gemma4](https://ollama.com/library/gemma4), [nemotron3.5](https://ollama.com/library/nemotron-3.5-lightning) в зависимости от ваших [ресурсов](https://github.com/AlexsJones/llmfit).
 
 ```env
 LLMSERVICE__LOCAL=1
-LLMSERVICE__API_URL=http://localhost:69228
+LLMSERVICE__API_URL=http://localhost:11434
 LLMSERVICE__API_KEY=super_secret_key
 LLMSERVICE__TIMEOUT=120
-LLMSERVICE__DEFAULT_MODEL=mistral
+LLMSERVICE__DEFAULT_MODEL=qwen3.5
 ```
+Ориентир по выбору модели: https://artificialanalysis.ai/models/open-source/small
 иначе значения будут взяты из [конфига](https://github.com/eogod/EAGLE/blob/main/backend/app/core/config.py), и вы можете увидеть валидацию и типы там.
 
+OpenRouter необязателен и требует только ключ (и base URL, если используете прокси):
+```env
+LLMSERVICE__OPENROUTER_API_KEY=sk-or-v1-...
+# LLMSERVICE__OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+```
 
 Установка зависимостей
 ```bash
-# Poetry установка зависимостей из .lock (python3.14)
+# Poetry 2.x на python3.14 (poetry shell удалён в 2.0 - используйте poetry run)
 poetry install
-# или на debian / parrot
+# или на debian / parrot / kali
 python3.14 -m poetry install
 ```
 Если возникает ошибка (например как на Kali 2023-2024), то может помочь:
 ```bash
-python3 -m venv env
-source env/bin/activate
+python3.14 -m venv .venv
+source .venv/bin/activate
 # затем та же самая установка, что и выше
 ```
-Запуск базы данных и миграций по порядку
+Запуск базы данных (PostgreSQL + Valkey) и миграций по порядку
 ```bash
-# если без докера - ищите в доках дистрибутива
-docker-compose up -d
+# плагин docker compose v2, а не старый docker-compose
+docker compose up -d
 
-python3.14 -m poetry shell
-
-# запуск Alembic для применения изменений в бдшке
-alembic upgrade head
+# poetry shell не нужен: poetry run выполняет команду в venv проекта
+poetry run alembic upgrade head
 ```
 Запуск backend FastAPI
 ```bash
-python3.14 -m poetry shell  # если выходили из нее
-
 # это не безопасно, но без фронта временное решение
-uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Использование

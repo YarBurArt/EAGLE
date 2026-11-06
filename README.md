@@ -2,6 +2,8 @@
 
 [Russian version](https://github.com/eogod/EAGLE/blob/main/docs/README-ru.md)
 
+[Architecture](https://github.com/eogod/EAGLE/blob/main/docs/architecture.md)
+
 The Emulated Attack Generator with Layered Engine is an interactive system for building
 and executing realistic attack chains based on the [Unified Cyber Kill Chain](https://www.unifiedkillchain.com/) stages and supports the dynamic formation of attack chains in real
 time. It works in the context of an API that uses GraphQL and the Mythics library plus a minimal frontend.
@@ -57,46 +59,53 @@ MYTHIC__PASSWORD=super_secret_password
 MYTHIC__SERVER_PORT=7443
 MYTHIC__TIMEOUT=-1
 MYTHIC__PAYLOAD_PORT_HTTP=1337
+
+REDIS__PASSWORD=super_secret_password
+REDIS__PORT=6379
 ```
-If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also this. We recommend these models [Mistral](https://ollama.com/library/mistral), [Qwen3-ab](https://ollama.com/jaahas/qwen3-abliterated) , [llama3.1:8b](https://ollama.com/library/llama3.1), [llama3.1-ab:8b](https://ollama.com/mannix/llama3.1-8b-abliterated) (more freely), [Qwen2.5-coder:32b](https://ollama.com/library/qwen2.5-coder)  which depends on your resources.
+If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also this. We recommend these models [qwen3.5 4-9b](https://ollama.com/library/qwen3.5), [qwen3.8 27b](https://ollama.com/library/qwen3.8), [gemma4](https://ollama.com/library/gemma4), [nemotron3.5](https://ollama.com/library/nemotron-3.5-lightning) which depends on your [resources](https://github.com/AlexsJones/llmfit).
 ```env
 LLMSERVICE__LOCAL=1
-LLMSERVICE__API_URL=http://localhost:69228
+LLMSERVICE__API_URL=http://localhost:11434
 LLMSERVICE__API_KEY=super_secret_key
 LLMSERVICE__TIMEOUT=120
-LLMSERVICE__DEFAULT_MODEL=mistral
+LLMSERVICE__DEFAULT_MODEL=qwen3.5
 ```
+Model choice reference: https://artificialanalysis.ai/models/open-source/small
+
 Otherwise, the values will be taken from the [config](https://github.com/eogod/EAGLE/blob/main/backend/app/core/config.py), and you can see the validation there.
+
+OpenRouter is optional and only needs the key (and base URL if you proxy it):
+```env
+LLMSERVICE__OPENROUTER_API_KEY=sk-or-v1-...
+# LLMSERVICE__OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+```
 
 Install dependencies
 ```bash
-# Poetry install (python3.14)
+# Poetry 2.x on python3.14
 poetry install
-# or on debian / parrot
+# or on debian / parrot / kali
 python3.14 -m poetry install
 ```
 If it throws an error (like on the kali 2023-2024), then it might help:
 ```bash
-python3 -m venv env
-source env/bin/activate
+python3.14 -m venv .venv
+source .venv/bin/activate
 # then the same as above
 ```
-Setup database and migrations 
+Start the database (PostgreSQL + Valkey) and run migrations
 ```bash
 # Setup database
-docker-compose up -d
+docker compose up -d
 
-python3.14 -m poetry shell
-
-# Run Alembic migrations for DB changes
-alembic upgrade head
+# poetry run executes inside the project venv
+poetry run alembic upgrade head
 ```
 Run backend FastAPI
 ```bash
-python3.14 -m poetry shell  # if you exited
-
-# not secure but for tests 
-uvicorn app.main:app --reload  --host 0.0.0.0 --port 8000
+# not secure but for tests
+poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Usage
