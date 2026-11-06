@@ -25,7 +25,7 @@ The main requirement is `python3.14` and above.
 
 If you decide not to deploy using Docker, you should use `PostgreSQL 18`.
 
-The minimum RAM requirement is 4-8GB, but 16GB is recommended due to agents, profiles from Mythic C2, and zero agent itself.
+The minimum RAM requirement is 2-4GB, but 8GB is recommended due to agents, profiles from Mythic C2, and zero agent itself.
 A minimum dual-core CPU , but it 's difficult with containers.
 
 ## Installation 
@@ -63,6 +63,7 @@ MYTHIC__PAYLOAD_PORT_HTTP=1337
 REDIS__PASSWORD=super_secret_password
 REDIS__PORT=6379
 ```
+Valkey is configured through the `REDIS__*` variables (Redis protocol).
 If you need local LLM via [ollama](https://github.com/ollama/ollama) add to env also this. We recommend these models [qwen3.5 4-9b](https://ollama.com/library/qwen3.5), [qwen3.8 27b](https://ollama.com/library/qwen3.8), [gemma4](https://ollama.com/library/gemma4), [nemotron3.5](https://ollama.com/library/nemotron-3.5-lightning) which depends on your [resources](https://github.com/AlexsJones/llmfit).
 ```env
 LLMSERVICE__LOCAL=1
@@ -111,16 +112,16 @@ poetry run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ## Usage
 
 By default, the application runs at **http://127.0.0.1:8000** and connects to `Mythic C2` on startup.
-At this URL you’ll find the API with a `Swagger UI`.  Frontend is on **/f/index** for now.
+The React frontend is served at that URL; the API with a `Swagger UI` lives at **/api/docs**.
 
-Open self-registration is off; accounts come from `.env` (`SECURITY__ADMIN_EMAIL` / `SECURITY__ADMIN_PASSWORD`, created on startup if missing), and the admin can add users via **/auth/register** (role system admin/operator/auditor is TODO). The browser session uses HttpOnly cookies set by **/auth/access-token**; `Authorization: Bearer` stays for Swagger/scripts. Registration is required because AttackChains are attached to users by ID. Logout via **/auth/logout**. Set `SECURITY__COOKIE_SECURE=true` behind TLS.
-> Note that the login field is the email you used during registration.
+Accounts follow the Mythic model: the admin comes from `.env` (`SECURITY__ADMIN_EMAIL` / `SECURITY__ADMIN_PASSWORD`, created on startup if missing), open self-registration is off (`SECURITY__REGISTRATION_ENABLED`), and only the admin creates other users via **/auth/register** (role system admin/operator/auditor is TODO). The browser session uses HttpOnly cookies set by **/auth/access-token**; `Authorization: Bearer` stays for Swagger/scripts. AttackChains are attached to users by ID. Logout via **/auth/logout**. Set `SECURITY__COOKIE_SECURE=true` behind TLS.
+> The login field is the account email.
 
 The /mcp mount requires a static key: `MCP__API_KEY=...` in `.env`; in the MCP client config pass it as `{"url": "http://<kali>:8000/mcp", "headers": {"Authorization": "Bearer ${EAGLE_MCP_API_KEY}"}}`.
 
 ### Direct bash on host
 
-`LOCAL_BASH__ENABLED=1` in `.env` enables POST /cmd/run-bash and the MCP tool run_bash_command: a command runs directly on the host where EAGLE runs (put EAGLE on the Kali VM) and one call returns `output / exit_code / truncated / full_log_path`. Each run is stored as one AttackStep + one BashTask row, status and output are mirrored to redis `eagle:bash:*`, so chains keep replaying. Safety: regex deny-list from `LOCAL_BASH__REJECT` (default blocks `rm -rf /`-class, mkfs, `dd of=/dev/`, fork bombs, shutdown, interactive clients like ssh/telnet/ftp/evil-winrm, psql/mysql without -c/-e, impacket-psexec/wmiexec/smbexec/dcomexec, hang forms of nc/socat with -l or LISTEN) + timeout `LOCAL_BASH__TIMEOUT` (default 300s, max 3600) + process-group kill. Full uncut logs land in backend/data/bash/ (gitignored). LLM analysis stays manual via **/cmd/step/{id}/analyze**.
+`LOCAL_BASH__ENABLED=1` in `.env` enables POST /cmd/run-bash and the MCP tool run_bash_command: a command runs directly on the host where EAGLE runs (put EAGLE on the Kali VM) and one call returns `output / exit_code / truncated / full_log_path`. Each run is stored as one AttackStep + one BashTask row, status and output are mirrored to Valkey `eagle:bash:*`, so chains keep replaying. Safety: regex deny-list from `LOCAL_BASH__REJECT` (default blocks `rm -rf /`-class, mkfs, `dd of=/dev/`, fork bombs, shutdown, interactive clients like ssh/telnet/ftp/evil-winrm, psql/mysql without -c/-e, impacket-psexec/wmiexec/smbexec/dcomexec, hang forms of nc/socat with -l or LISTEN) + timeout `LOCAL_BASH__TIMEOUT` (default 300s, max 3600) + process-group kill. Full uncut logs land in backend/data/bash/ (gitignored). LLM analysis stays manual via **/cmd/step/{id}/analyze**.
 
 
 Once authenticated, you can create a new attack chain with **/cmd/new-chain/**.
@@ -151,8 +152,8 @@ Chain status can be retrieved with **/cmd/chain-phase/{chain_id}**.
 
 To run chain, use **/cmd/run-chain/{chain_id}**, which streams each step’s output as HTTP chunks.
 Emergency stop is available via WebSocket or HTTP cancel endpoints.
-For convenience and stability, a minimal frontend is provided at **/f/index**, offering command execution ( agent / local ),
-LLM-assisted output analysis, and chain management.
+The frontend at the root URL covers chain building and execution (agent / local),
+LLM-assisted output analysis, and the document-analysis agent panel.
 
 Export a chain (with or without LLM analysis) via **/export-chain/json** or **/export-chain/yaml** to `JSON` or `YAML`.
 
