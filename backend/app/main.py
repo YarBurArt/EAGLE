@@ -18,7 +18,7 @@ from sqlalchemy import select
 from starlette.datastructures import Headers
 
 from app.api.api_router import api_router, auth_router, frontend_router
-from app.api.deps import ChainController
+from app.api.deps import AgentRunController, ChainController
 from app.api.endpoints import tasks_mcp
 from app.api.endpoints.tasks_mcp import mcp as eagle_mcp
 from app.cmd.c2_tool import MythicClient
@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
     app.state.mythic_client = mythic_client
     app.state.events_service = events_service
     app.state.chain_controller = ChainController()
+    app.state.agent_run_controller = AgentRunController()
     tasks_mcp._events_service = events_service
 
     # bootstrap admin until roles exist
@@ -83,18 +84,14 @@ async def lifespan(app: FastAPI):
             settings.mitre.enterprise_attack_path,
             settings.mitre.threat_groups_path,
         )
-        app.state.attack_graph = graph
-        tasks_mcp._attack_graph = graph
-
         # build APT co-use chain index for suggest_next_ttps
         _ttp_svc = TTPInfoService(graph)
         chain_index = build_apt_chain_index(graph, _ttp_svc.get_phase_for_ttp)
-        app.state.apt_chain_index = chain_index
-        tasks_mcp._apt_chain_index = chain_index
+        # the finished service is handed to the MCP tools, they touch no raw data
+        tasks_mcp._ttp_service = TTPInfoService(graph, chain_index)
     except Exception as e:
         print("\033[1;33mWARNING:   \033[0mMITRE data load failed:", e)
-        app.state.attack_graph = None
-        app.state.apt_chain_index = None
+        tasks_mcp._ttp_service = None
 
     # required for streamable HTTP in mcp
     async with _mcp_session_manager.run():
