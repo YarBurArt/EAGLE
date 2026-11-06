@@ -166,7 +166,9 @@ class ChainService:
 
     async def get_chain_steps(self, chain_id: int) -> list[AttackStep]:
         chain_steps_list = await self.session.execute(
-            select(AttackStep).where(AttackStep.chain_id == chain_id)
+            select(AttackStep)
+            .where(AttackStep.chain_id == chain_id)
+            .order_by(AttackStep.id)
         )
         return list(chain_steps_list.scalars().all())
 
@@ -192,11 +194,13 @@ class ChainService:
         steps = await self.session.execute(
             select(AttackStep)
             .where(AttackStep.chain_id == chain_id)
+            .order_by(AttackStep.id)
             .options(selectinload(AttackStep.agent))
         )
         steps = list(steps.scalars().all())
         for step in steps:
-            agent = step.agent[0] if step.agent else None
+            # replaying an agent step appends a new Agent row; the last one is current
+            agent = step.agent[-1] if step.agent else None
             step.callback_display_id = agent.callback_display_id if agent else 0
 
         return {

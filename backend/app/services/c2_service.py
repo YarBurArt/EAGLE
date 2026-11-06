@@ -19,6 +19,7 @@ from app.cmd.proc import (
     process_approved_cmd,
 )
 from app.models import AttackChain, AttackStep, BashTask, MythicTask, User
+from app.services.step_reuse import apply_execution, reusable
 
 
 class CommandsC2ExecService:
@@ -38,14 +39,19 @@ class CommandsC2ExecService:
         phase_name: str,
         current_user: User,
         is_analyze_llm: bool = False,
+        step_id: int | None = None,
     ) -> dict[str, Any]:
         """execute bash/C2 command via local agent, returns ticket now,
         raw_output & llm_analysis updates by events service via stream"""
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
-        step, _, mythic_task = await check_and_process_local_cmd(
+        produced, _, mythic_task = await check_and_process_local_cmd(
             command, display_id, ctx, self.mythic_client, is_analyze_llm
         )
-        self.session.add(step)
+
+        step = await self._reuse_step(step_id, chain_id, produced)
+        if step is None:
+            step = produced
+            self.session.add(step)
         try:
             await self.session.commit()
             mythic_task.step_id = step.id
@@ -75,15 +81,20 @@ class CommandsC2ExecService:
         phase_name: str,
         current_user: User,
         is_analyze_llm: bool = False,
+        step_id: int | None = None,
     ) -> dict[str, Any]:
         """execute agent command, returns ticket now,
         raw_output & llm_analysis updates by events service via stream"""
         ctx = ChainContext(chain_id=chain_id, phase_name=phase_name)
         cb = CallbackInfo(display_id=display_id, step_type="agent", tool_name=tool)
-        step, _, c_agent, mythic_task = await check_and_process_agent_cmd(
+        produced, _, c_agent, mythic_task = await check_and_process_agent_cmd(
             cb, ctx, command_params, self.mythic_client, is_analyze_llm
         )
-        self.session.add(step)
+
+        step = await self._reuse_step(step_id, chain_id, produced)
+        if step is None:
+            step = produced
+            self.session.add(step)
         try:
             await self.session.commit()
             mythic_task.step_id = step.id
@@ -105,6 +116,23 @@ class CommandsC2ExecService:
             "raw_output": step.raw_log or "",
             "llm_analysis": step.llm_analysis or "",
         }
+
+    async def _reuse_step(
+        self, step_id: int | None, chain_id: int, produced: AttackStep
+    ) -> AttackStep | None:
+        """execute the clicked row rather than inserting a new one."""
+        if step_id is None:
+            return None
+        existing = await self.session.scalar(
+            select(AttackStep).where(
+                AttackStep.id == step_id, AttackStep.chain_id == chain_id
+            )
+        )
+
+        target = reusable(existing, chain_id)
+        if target is None:
+            return None
+        return apply_execution(target, produced)
 
     async def approve_action(  # noqa: PLR0913, PLR0917
         self,

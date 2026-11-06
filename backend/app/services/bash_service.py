@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cmd.local_bash import (
@@ -23,6 +24,7 @@ from app.core.config import get_settings
 from app.core.database_session import get_async_session
 from app.models import AttackStep, BashTask, User
 from app.services.chain_service import ChainService
+from app.services.step_reuse import apply_execution, reusable
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +37,13 @@ class BashCommandService:
         self.session = session
         self.events = events
 
-    async def start(
+    async def start(  # noqa: PLR0913, PLR0917
         self,
         command: str,
         chain_name: str,
         current_user: User,
         timeout: int = 300,
+        step_id: int | None = None,
     ) -> dict[str, Any]:
         """validate + persist submitted rows + spawn worker, returns ticket"""
         if not get_settings().local_bash.enabled:
@@ -58,7 +61,7 @@ class BashCommandService:
         )
         cfg = get_settings().local_bash
         timeout = min(int(timeout or cfg.timeout), cfg.max_timeout)
-        step = AttackStep(
+        produced = AttackStep(
             chain_id=chain_id,
             phase=phase_name,
             step_type="bash",
@@ -71,14 +74,35 @@ class BashCommandService:
             raw_log="",
             status="submitted",
         )
-        self.session.add(step)
+
+        step = None
+        if step_id is not None:
+            existing = await self.session.scalar(
+                select(AttackStep).where(
+                    AttackStep.id == step_id,
+                    AttackStep.chain_id == chain_id,
+                )
+            )
+            step = reusable(existing, chain_id)
+        if step is not None:
+            # execute the row the operator clicked; id and order stay stable
+            apply_execution(step, produced)
+            step.status = "submitted"
+            step.executed_at = func.now()
+        else:
+            step = produced
+            self.session.add(step)
+
+        # step.id is assigned on flush; without it BashTask.step_id stays NULL
+        await self.session.flush()
         bash_task = BashTask(step_id=step.id, status="submitted")
         self.session.add(bash_task)
         try:
             await self.session.commit()
             await self.session.refresh(bash_task)
         except Exception as e:
-            self.session.rollback()
+            logger.warning("bash step save failed: %s", e)
+            await self.session.rollback()
             raise HTTPException(400, "bash step save failed") from e
         # background worker, ref kept by the events service like its own loops
         self.events.spawn_bash_worker(
