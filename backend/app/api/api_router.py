@@ -7,7 +7,16 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import api_messages, deps
-from app.api.endpoints import auth, kill_chain, llm, tasks, users
+from app.api.endpoints import (
+    agent_chat,
+    agent_drafts,
+    agent_sessions,
+    auth,
+    kill_chain,
+    llm,
+    tasks,
+    users,
+)
 
 auth_router = APIRouter()
 auth_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -50,6 +59,13 @@ api_router.include_router(
 api_router.include_router(
     kill_chain.router, prefix="/export-chain", tags=["kill-chain"]
 )
+for _agent_router in (agent_sessions.router, agent_chat.router, agent_drafts.router):
+    api_router.include_router(
+        _agent_router,
+        prefix="/agent",
+        tags=["agent"],
+        dependencies=[Depends(deps.get_current_user)],
+    )
 
 # since same repo
 _frontend_dist = (

@@ -17,6 +17,9 @@ from app.api import api_messages
 from app.core import database_session
 from app.core.security.jwt import verify_jwt_token
 from app.models import User
+from app.services.agent_chat_service import AgentChatService
+from app.services.agent_document_service import AgentDocumentService
+from app.services.agent_draft_service import AgentDraftService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/access-token", auto_error=False)
 
@@ -42,6 +45,32 @@ class ChainController:
             logging.getLogger(__name__).info(
                 "chain %s cancel: killed %s bash process(es)", chain_id, killed
             )
+
+
+class AgentRunController:
+    """in-memory cancellation flags for document-analysis runs.
+
+    A run is a single SSE request; the flag is only meaningful while it is open,
+    which matches how ChainController treats chain runs.
+    """
+
+    def __init__(self) -> None:
+        self.active_runs: dict[int, asyncio.Event] = {}
+
+    def start(self, run_id: int) -> asyncio.Event:
+        event = asyncio.Event()
+        self.active_runs[run_id] = event
+        return event
+
+    def cancel(self, run_id: int) -> bool:
+        event = self.active_runs.get(run_id)
+        if event is None:
+            return False
+        event.set()
+        return True
+
+    def finish(self, run_id: int) -> None:
+        self.active_runs.pop(run_id, None)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession]:
@@ -101,3 +130,32 @@ def get_chain_controller(request: Request) -> ChainController:
     if not isinstance(controller, ChainController):
         raise ValueError("cannot get ChainController")
     return controller
+
+
+def get_agent_run_controller(request: Request) -> AgentRunController:
+    """inject AgentRunController from app.state"""
+    controller = request.app.state.agent_run_controller
+    if not isinstance(controller, AgentRunController):
+        raise ValueError("cannot get AgentRunController")
+    return controller
+
+
+async def get_agent_chat_service(
+    session: AsyncSession = Depends(get_session),
+) -> AgentChatService:
+    """inject AgentChatService bound to a fresh request session"""
+    return AgentChatService(session)
+
+
+async def get_agent_document_service(
+    session: AsyncSession = Depends(get_session),
+) -> AgentDocumentService:
+    """inject AgentDocumentService bound to a fresh request session"""
+    return AgentDocumentService(session)
+
+
+async def get_agent_draft_service(
+    session: AsyncSession = Depends(get_session),
+) -> AgentDraftService:
+    """inject AgentDraftService bound to a fresh request session"""
+    return AgentDraftService(session)
