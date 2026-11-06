@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 
 from app.cmd.llm_analysis import llm_service
 from app.core.config import get_settings
@@ -32,7 +32,9 @@ STREAM_IDLE_SEC = 90
 # gr a terminal status may still be followed by output & analysis
 STREAM_GRACE_SEC = 20
 # one xread block, low value just makes tests fast
-STREAM_BLOCK_MS = 15_000
+# short block so a dead/idle redis read cannot eat the request; the loop
+# re-polls and falls back to the database for a terminal state
+STREAM_BLOCK_MS = 3_000
 
 
 def _row_now() -> str:
@@ -54,6 +56,37 @@ def _decode(raw) -> str:
     if isinstance(raw, dict):
         return str(raw.get("data", ""))
     return str(raw)
+
+
+def _ingest_rows(state: dict[str, dict], stream_key: str, rows) -> list[str]:
+    """apply one read batch to the shared state, return rows for the client."""
+    out: list[str] = []
+    for row_id, raw in rows:
+        state[stream_key]["last"] = row_id
+        row = _decode(raw)
+        event = json.loads(row)
+        if event.get("event") == "status" and event.get("completed"):
+            state[stream_key]["terminal_t"] = time.time()
+        if event.get("event") in ("output", "build", "analysis") and (
+            state[stream_key].get("terminal_t") is None
+        ):
+            state[stream_key]["terminal_t"] = time.time() - (STREAM_GRACE_SEC - 2)
+        out.append(row)
+
+    return out
+
+
+def _expire_idle(
+    state: dict[str, dict], start_t: float, now_t: float, step_id: int
+) -> None:
+    """drop settled-by-grace and stale-idle streams so the read loop can end."""
+    for k in sorted(state):
+        s = state[k]
+        if s["terminal_t"] and now_t - s["terminal_t"] > STREAM_GRACE_SEC:
+            del state[k]
+        elif not s["terminal_t"] and now_t - start_t > STREAM_IDLE_SEC:
+            logger.info("step %s stream %s idle, closing", step_id, k)
+            del state[k]
 
 
 class MythicEventsService:
@@ -134,24 +167,19 @@ class MythicEventsService:
         return t
 
     async def _subscribe_loop(self) -> None:
-        """one mythic task subscription, resubscribe on any failure"""
+        """one mythic task subscription, no reconnect retry"""
         from mythic import mythic  # noqa: PLC0415
 
-        instance = None
-        while True:
-            try:
-                if instance is None:
-                    instance = self._instance or await mythic.login(**self._mythic_cfg)
-                async for task in mythic.subscribe_all_tasks_and_updates(
-                    mythic=instance, custom_return_attributes=TASK_EVENTS_ATTRS
-                ):
-                    await self._on_task_event(task)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                instance = None
-                logger.warning("task subscription failed, retry in 5s: %s", e)
-                await asyncio.sleep(5)
+        try:
+            instance = self._instance or await mythic.login(**self._mythic_cfg)
+            async for task in mythic.subscribe_all_tasks_and_updates(
+                mythic=instance, custom_return_attributes=TASK_EVENTS_ATTRS
+            ):
+                await self._on_task_event(task)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.warning("task subscription failed: %s", e)
 
     async def _recover_stale(self) -> None:
         """tickets left in db by a dead process get a redis row again,
@@ -177,8 +205,41 @@ class MythicEventsService:
                         BashTask.status.in_(("submitted", "running"))
                     )
                 )
-                for row in bash_rows.scalars():
-                    await self.emit_bash_status(row.id, row.status)
+                stale = list(bash_rows.scalars())
+                step_ids = [row.step_id for row in stale]
+                if step_ids:
+                    # the worker lived in the dead process: it can never finish
+                    await session.execute(
+                        update(BashTask)
+                        .where(BashTask.id.in_([row.id for row in stale]))
+                        .values(status="failed", completed_at=func.now())
+                    )
+                    await session.execute(
+                        update(AttackStep)
+                        .where(
+                            AttackStep.id.in_(step_ids),
+                            AttackStep.status.in_(("submitted", "running")),
+                        )
+                        .values(status="fail")
+                    )
+
+                # placeholders left "running" by a dead client/stream have no
+                # task row; fail them unless Mythic still owns the step
+                active_mythic = select(MythicTask.step_id).where(
+                    MythicTask.status.in_(("submitted", "running", "dispatched"))
+                )
+                await session.execute(
+                    update(AttackStep)
+                    .where(
+                        AttackStep.status.in_(("submitted", "running")),
+                        ~AttackStep.id.in_(active_mythic),
+                    )
+                    .values(status="fail")
+                )
+                await session.commit()
+
+                for row in stale:
+                    await self.emit_bash_status(row.id, "failed", completed=True)
         except Exception as e:
             logger.warning("bash stale recovery skipped: %s", e)
             return
@@ -522,9 +583,32 @@ class MythicEventsService:
             step = await session.scalar(
                 select(AttackStep).where(AttackStep.id == step_id)
             )
-            if step is not None and step.mythic_payload_uuid:
+            # bash/local steps carry a placeholder uuid but no payload; their
+            # payload stream never exists and would keep this stream open
+            if step is not None and step.mythic_payload_id:
                 keys.append(f"{self.payload_key(step.mythic_payload_uuid)}:events")
+
         return keys
+
+    async def _terminal_from_db(self, step_id: int) -> dict[str, Any] | None:
+        """last resort when redis events were missed: report the settled row."""
+        async with get_async_session() as session:
+            step = await session.get(AttackStep, step_id)
+            if step is None or step.status not in ("success", "fail", "error"):
+                return None
+            if step.raw_log:
+                return {
+                    "event": "output",
+                    "step_id": step_id,
+                    "status": "completed" if step.status == "success" else "failed",
+                    "raw_log": step.raw_log,
+                }
+            return {
+                "event": "status",
+                "step_id": step_id,
+                "status": "completed" if step.status == "success" else "failed",
+                "completed": True,
+            }
 
     async def read_streams(
         self, last: dict[str, str], block_ms: int = 15_000
@@ -544,8 +628,9 @@ class MythicEventsService:
         keys = await self.step_stream_keys(step_id)
         if not keys or not self.available:
             return
-        # state per key: last id + when it got terminal (None=not yet)
-        state = {k: {"last": "$", "terminal_t": None} for k in keys}
+        # replay from the beginning: a fast task can emit every event between
+        # the snapshot above and the first XREAD, so "$" would miss all of them
+        state = {k: {"last": "0-0", "terminal_t": None} for k in keys}
         start_t = time.time()
 
         def all_settled() -> bool:
@@ -553,31 +638,27 @@ class MythicEventsService:
 
         while not all_settled():
             live_last = {k: s["last"] for k, s in state.items()}
-            resp = await self.read_streams(live_last, block_ms=STREAM_BLOCK_MS)
+            try:
+                resp = await self.read_streams(live_last, block_ms=STREAM_BLOCK_MS)
+            except Exception as exc:
+                # redis hiccup must not kill the response after the snapshot
+                logger.warning("step %s stream read failed: %s", step_id, exc)
+                resp = None
+
             now_t = time.time()
             if not resp:
-                # idle: drop settled-by-grace keys and stale-idle streams
-                for k in sorted(state):
-                    s = state[k]
-                    if s["terminal_t"] and now_t - s["terminal_t"] > STREAM_GRACE_SEC:
-                        del state[k]
-                    elif not s["terminal_t"] and now_t - start_t > STREAM_IDLE_SEC:
-                        logger.info("step %s stream %s idle, closing", step_id, k)
-                        del state[k]
+                fallback = await self._terminal_from_db(step_id)
+                if fallback is not None:
+                    yield json.dumps(fallback) + "\n"
+                    return
+
+                _expire_idle(state, start_t, now_t, step_id)
                 continue
+
             for stream_key, rows in resp:
                 if stream_key not in state:
                     continue
-                for row_id, raw in rows:
-                    state[stream_key]["last"] = row_id
-                    row = _decode(raw)
-                    event = json.loads(row)
-                    if event.get("event") == "status" and event.get("completed"):
-                        state[stream_key]["terminal_t"] = time.time()
-                    if event.get("event") in ("output", "build", "analysis") and (
-                        state[stream_key].get("terminal_t") is None
-                    ):
-                        state[stream_key]["terminal_t"] = time.time() - (
-                            STREAM_GRACE_SEC - 2
-                        )
-                    yield row
+                # NDJSON: every row needs its own newline or the client
+                # buffers all of them until the stream closes
+                for row in _ingest_rows(state, stream_key, rows):
+                    yield f"{row}\n"

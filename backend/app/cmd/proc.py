@@ -125,7 +125,7 @@ async def process_approved_cmd(  # noqa: PLR0911  # one return per step_type bra
         )
         return result, llm_a, agent, m_task
     if cb.step_type == "bash":
-        result, llm_a, _run = await check_and_process_bash_cmd(cmd, ctx)
+        result, llm_a = await check_and_process_bash_cmd(cmd, ctx)
         return result, llm_a, "", None
     # custom: any other scenarios based on custom C2 functions in c2_tool
     if mythic_client is None or not hasattr(mythic_client, cb.tool_name):
